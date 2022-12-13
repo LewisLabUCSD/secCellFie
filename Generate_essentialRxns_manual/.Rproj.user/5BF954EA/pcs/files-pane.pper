@@ -1,0 +1,13 @@
+{
+    "path" : "~/Desktop/SenateExam/Aim2_CellFie/SecPathway.CellFIE/usingGeM/Generate_essentialRxns_manual",
+    "sortOrder" : [
+        {
+            "ascending" : true,
+            "columnIndex" : 1
+        },
+        {
+            "ascending" : true,
+            "columnIndex" : 2
+        }
+    ]
+}

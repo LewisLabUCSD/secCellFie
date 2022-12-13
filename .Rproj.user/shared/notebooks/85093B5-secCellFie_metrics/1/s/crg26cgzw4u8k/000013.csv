@@ -1,0 +1,3 @@
+"0","ggraph(mygraph, 'circlepack') + "
+"0","  geom_node_circle(aes(fill = depth), size = 0.25, n = 50) + "
+"0","  coord_fixed() +geom_node_text(aes(label = name))"

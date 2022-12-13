@@ -1,0 +1,6 @@
+"0","# Mouse"
+"0","Mouse.task.simp <- left_join(select(CHO_tasks.simp, c(""Task"", ""Reaction.abbreviation"", ""HM.notes.(Rxn.type)"")), Mouse_rxns) "
+"2","Joining, by = ""Reaction.abbreviation"""
+"0","# Human"
+"0","Human.task.simp <- left_join(select(CHO_tasks.simp, c(""Task"", ""Reaction.abbreviation"", ""HM.notes.(Rxn.type)"")), Human_rxns) "
+"2","Joining, by = ""Reaction.abbreviation"""

@@ -1,0 +1,3 @@
+"0","CHO_rxns = openxlsx::read.xlsx('essentialRxn_notebook2022.xlsx', sheet=""Secretory Reactions (CHO)"")"
+"0","CHO_tasks = openxlsx::read.xlsx('essentialRxn_notebook2022.xlsx', sheet=""CHO_tasks"")"
+"0","CHO_tasks.simp = openxlsx::read.xlsx('essentialRxn_notebook2022.xlsx', sheet=""CHO_tasks.simp"")"

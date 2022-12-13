@@ -1,0 +1,68 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+```
+
+
+Load data
+```{r}
+CHO_rxns = openxlsx::read.xlsx('essentialRxn_notebook2022.xlsx', sheet="Secretory Reactions (CHO)")
+CHO_tasks = openxlsx::read.xlsx('essentialRxn_notebook2022.xlsx', sheet="CHO_tasks")
+CHO_tasks.simp = openxlsx::read.xlsx('essentialRxn_notebook2022.xlsx', sheet="CHO_tasks.simp")
+```
+
+
+Clean task reactions
+```{r}
+task_rxns = CHO_tasks$Reaction.abbreviation %>% na.omit()
+setequal(task_rxns, CHO_tasks.simp$Reaction.abbreviation)
+```
+
+Rxns not in tasks
+```{r}
+setdiff(CHO_rxns$Reaction.abbreviation, CHO_tasks$Reaction.abbreviation)
+```
+
+
+## COMPARE CHO vs Mouse vs Human
+
+Load data
+```{r}
+Mouse_rxns = openxlsx::read.xlsx('essentialRxn_notebook2022.xlsx', sheet="Secretory Reactions (Mouse)")
+Human_rxns = openxlsx::read.xlsx('essentialRxn_notebook2022.xlsx', sheet="Secretory Reactions (Human)")
+```
+
+```{r}
+### difference between mouse and human
+# in human but not in mouse
+setdiff(Human_rxns$Reaction.abbreviation, Mouse_rxns$Reaction.abbreviation)
+# in mouse but not in human
+setdiff(Mouse_rxns$Reaction.abbreviation, Human_rxns$Reaction.abbreviation)
+
+### difference between mouse and CHO
+# in mouse but not in CHO
+setdiff(Mouse_rxns$Reaction.abbreviation, CHO_rxns$Reaction.abbreviation)
+# in CHO but not in Mouse
+setdiff(CHO_rxns$Reaction.abbreviation, Mouse_rxns$Reaction.abbreviation)
+```
+
+## Generate task lists for Mouse and Human
+
+Mouse
+```{r}
+# Mouse
+Mouse.task.simp <- left_join(select(CHO_tasks.simp, c("Task", "Reaction.abbreviation", "HM.notes.(Rxn.type)")), Mouse_rxns) 
+
+# Human
+Human.task.simp <- left_join(select(CHO_tasks.simp, c("Task", "Reaction.abbreviation", "HM.notes.(Rxn.type)")), Human_rxns) 
+```
+
+Save
+```{r}
+openxlsx::write.xlsx(list(CHO.rxns=CHO_rxns, CHO.tasks=CHO_tasks.simp, Mouse.rxns=Mouse_rxns, Mouse.tasks=Mouse.task.simp, Human.rxns=Human_rxns, Human.tasks=Human.task.simp), "essentialRxn_intermediate2022.xlsx")
+```
+

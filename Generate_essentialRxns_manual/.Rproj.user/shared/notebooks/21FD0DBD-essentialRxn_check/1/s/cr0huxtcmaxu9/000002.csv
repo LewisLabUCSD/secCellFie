@@ -1,0 +1,2 @@
+"0","Mouse_rxns = openxlsx::read.xlsx('essentialRxn_notebook2022.xlsx', sheet=""Secretory Reactions (Mouse)"")"
+"0","Human_rxns = openxlsx::read.xlsx('essentialRxn_notebook2022.xlsx', sheet=""Secretory Reactions (Human)"")"

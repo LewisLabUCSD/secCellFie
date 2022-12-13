@@ -1,0 +1,2 @@
+"0","# With igraph:"
+"0","plot(mygraph, vertex.label=V(mygraph)$name, edge.arrow.size=0, vertex.size=2)"

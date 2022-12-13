@@ -1,0 +1,1 @@
+"0","openxlsx::write.xlsx(list(CHO.rxns=CHO_rxns, CHO.tasks=CHO_tasks.simp, Mouse.rxns=Mouse_rxns, Mouse.tasks=Mouse.task.simp, Human.rxns=Human_rxns, Human.tasks=Human.task.simp), ""essentialRxn_intermediate2022.xlsx"")"

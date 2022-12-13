@@ -1,0 +1,3 @@
+"0","ggraph(mygraph, layout = 'dendrogram', circular = TRUE) + "
+"0","  geom_edge_diagonal() + "
+"0","  geom_node_text(aes(label = name))"

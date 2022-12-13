@@ -1,0 +1,6 @@
+"0","task_rxns = CHO_tasks$Reaction.abbreviation %>% na.omit()"
+"0","setequal(task_rxns, CHO_tasks.simp$Reaction.abbreviation)"
+"1","[1]"
+"1"," TRUE"
+"1","
+"
