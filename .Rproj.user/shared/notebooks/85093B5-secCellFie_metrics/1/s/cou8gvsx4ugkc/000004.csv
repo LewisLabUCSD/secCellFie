@@ -1,4 +1,0 @@
-"0","edge_list=rbind(edges_level1_2, edges_level2_3, edges_level3_4)
-"
-"2","Error in rbind(deparse.level, ...) : object 'edges_level2_3' not found
-"

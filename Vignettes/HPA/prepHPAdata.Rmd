@@ -1,0 +1,65 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE)
+```
+
+Load the required library packages
+```{r}
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+```
+
+######################
+BLOOD
+######################
+
+Load HPA immune cell data
+```{r}
+blood.data <- fread(paste('unzip -p', "Input/rna_immune_cell_sample.tsv.zip")) %>%
+    # remove total PBMC
+  filter(`Immune cell` != "total PBMC") %>%
+  # sample ID as number causes issues downstream in Matlab... add prefix or suffix to force non-numeric reading
+  mutate(`Sample ID` = paste0("sample_", `Sample ID`))
+
+```
+
+Generate expression matrix compatible with CellFie
+```{r}
+expression.type <- c("TPM", "pTPM", "nTPM")
+
+for(exp in expression.type) {
+ 
+  # Isolate expression data and reshape the data from long format to wide format (rows=samples, columns=genes)
+  TPM.matrix <- dplyr::select(blood.data, c("ENSG ID", "Sample ID", exp)) %>%
+    tidyr::spread_("Sample ID", exp)
+  
+  # Convert ensemble gene IDs to entrez IDs
+  gene.map <- AnnotationDbi::select(org.Hs.eg.db, keys=TPM.matrix$`ENSG ID`, columns=c("ENTREZID"), keytype="ENSEMBL") %>%
+    na.omit()
+  TPM.matrix.entrez <- left_join(TPM.matrix, gene.map, by=c("ENSG ID"="ENSEMBL")) %>%
+    dplyr::select(ENTREZID, everything()) %>% dplyr::select(-`ENSG ID`) %>% na.omit()
+  
+  # Aggregate duplicate genes by max value
+  TPM.entrez.max <- aggregate(TPM.matrix.entrez[,-1], by=list(TPM.matrix.entrez$ENTREZID), FUN=max) %>%
+  dplyr::rename(entrezID = Group.1) %>% sapply(as.numeric) %>% as.data.frame()
+  
+  # Add pseudo count
+  TPM.entrez.pseudo <- cbind(ENTREZID=TPM.entrez.max$entrezID, TPM.entrez.max[, 2:ncol(TPM.entrez.max)] + 0.00001)
+  
+  # Export file
+  fwrite(TPM.entrez.pseudo, paste0("Output/HPAblood_109_", exp, "expression.csv"))
+}
+```
+
+Generate properties data matrix (phenotypic information for the samples)
+```{r}
+blood.pheno <- dplyr::select(blood.data, c("Sample ID", "Donor", "Immune cell")) %>% unique()
+fwrite(blood.pheno, "Output/HPAblood_109_pheno.csv")
+```

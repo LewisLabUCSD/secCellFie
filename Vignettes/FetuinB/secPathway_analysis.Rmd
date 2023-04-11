@@ -1,0 +1,323 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE)
+```
+
+```{r}
+library(data.table)
+library(dplyr)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+library(ggplot2)
+library(treemap)
+library(treemapify)
+library(clusterProfiler)
+```
+
+
+###################################################### 
+LOAD DATA
+######################################################
+
+Interactomics data (Caressa)
+```{r}
+protLFQ <- readxl::read_excel("Input/Summary_Results_HEP.xlsx", sheet="Perseus")
+protLFQ<- data.table(protLFQ)[, c("Gene names","Welch's T-test Difference LFQ intensity TRAb_LFQ intensity WTAb", "Welch's T-test q-value LFQ intensity TRAb_LFQ intensity WTAb")] %>% setNames(c("geneName", "LFQ_FetB.vs.WT", "qvalue"))
+#note: can't include protein names because number of proteins names does NOT equal number of gene names for split
+protLFQ_parse <- mutate(protLFQ, id=1:nrow(protLFQ)) %>% tidyr::separate_rows(geneName, sep=";") %>% data.table()
+# Remove any NA values (LFC==NA and geneName==NA)
+protGSEA <- protLFQ_parse[LFQ_FetB.vs.WT != "NA"][geneName != "NA"]
+# Add column of entrez IDs
+entrezMap <- AnnotationDbi::select(org.Hs.eg.db, keys=protGSEA$geneName, keytype = "SYMBOL", columns="ENTREZID") #if row has multiple gene names, only use first to map
+idx <- match(protGSEA$geneName, entrezMap$SYMBOL)
+#View(data.frame(protGSEA$geneName, entrezMap$SYMBOL[idx])) #sanity check
+protGSEA$Entrez <- entrezMap$ENTREZID[idx]
+```
+
+Transcriptomics data (Curtis)
+```{r}
+DE <-fread("Input/DE.csv") %>% distinct()
+```
+
+Secretory Pathway genes & annotations (Feizi)
+```{r}
+term2gene_secM <- data.table(readRDS("/Users/helenmasson/Desktop/SenateExam/Data/secPathway/secMfeizi_term2gene.RDS"))
+term2gene_gsea <- term2gene_secM[, c("Subsystem", "gene_name")][, gene_name := toupper(gene_name)]
+```
+
+Subset data to only include secMs (Feizi)
+```{r}
+## interactomics
+protLFQ_secM <- dplyr::inner_join(protGSEA, term2gene_secM[, c("gene_name", "Subsystem")], by=c("geneName"="gene_name")) %>%
+  arrange(LFQ_FetB.vs.WT)
+secM_pos <- protLFQ_secM[LFQ_FetB.vs.WT > 0]
+secM_neg <- protLFQ_secM[LFQ_FetB.vs.WT < 0]
+protLFQ_secM$interaction <- rep("decrease", nrow(protLFQ_secM))
+protLFQ_secM$interaction[protLFQ_secM$LFQ_FetB.vs.WT >0] <- "increase"
+
+## transcriptomics
+DE_secM <- inner_join(DE, term2gene_secM[, c("gene_name", "Subsystem")], by=c("symbol.sep"="gene_name")) %>% arrange(log2FoldChange) %>% distinct()
+```
+
+
+###################################################### 
+INTERACTOME
+######################################################
+
+Visualize what parts of the secretory pathway Fetuin interacts with (by subsystem)
+```{r}
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+```
+```{r}
+secM.missing <- term2gene_secM[!(term2gene_secM$gene_name %in% protGSEA$geneName), c("gene_name", "Subsystem")] %>% distinct()
+missingSubsystem.df <- as.data.table(table(secM.missing$Subsystem))[, subgroup := "no interactions"] %>% setnames(c("subsystem", "value", "subgroup"))
+interactionSubsystem.df <- as.data.table(table(protLFQ_secM$Subsystem))[, subgroup := "interactions"] %>% setnames(c("subsystem", "value", "subgroup"))
+```
+Table of % interactions by subsystem
+```{r}
+subsystem.percentage <- data.table(table(term2gene_secM$Subsystem)) %>% setnames(c("subsystem", "total.genes")) %>%
+  left_join(missingSubsystem.df[, c("subsystem", "value")]) %>% setnames("value", "missing.genes") %>% 
+  left_join(interactionSubsystem.df[, c("subsystem", "value")]) %>% setnames("value", "interacting.genes")
+subsystem.percentage <- subsystem.percentage[,lapply(.SD,function(x){ifelse(is.na(x),0,x)})][, percent.missing := round((missing.genes/total.genes)*100,0)][, percent.interacting := round((interacting.genes/total.genes)*100,0)]
+```
+Treemap
+```{r}
+missingSubsystem.df <- missingSubsystem.df[, alpha := 50]  %>% left_join(subsystem.percentage[, c("subsystem", "percent.missing")]) %>% setnames("percent.missing", "percent")
+interactionSubsystem.df <- interactionSubsystem.df[, alpha := 100] %>% left_join(subsystem.percentage[, c("subsystem", "percent.interacting")]) %>% setnames("percent.interacting", "percent")
+treemap.data <- rbind(missingSubsystem.df, interactionSubsystem.df)
+```
+```{r}
+png("Figures/FetB_interactome_treemap.png", width=950, height=700)
+fetB_treemap <- ggplot(treemap.data, aes(area=value, fill=subsystem, subgroup=subsystem, label=paste(percent, "%", sep=""), subgroup2=subgroup)) +
+  geom_treemap(aes(alpha=alpha)) +
+  geom_treemap_subgroup_border(colour="white") +
+  #geom_treemap_subgroup2_border(color="gray56") +
+  geom_treemap_text(fontface="italic", colour="gray47", place="centre", grow=F, reflow=T) +
+  geom_treemap_subgroup_text(place="centre", grow=F, alpha=0.5, colour="#FAFAFA", min.size=0) +
+  scale_alpha_continuous(range=c(0.5,1), labels=c("no interactions", "", "", "", "", "interacts with Fetuin-B"))  +
+  labs(alpha="Interaction", fill="Subsystem") +
+  theme(legend.text=element_text(size=15), legend.title=element_text(size=18))
+dev.off()
+```
+
+Compare secretory pathway subsystems that increased vs decreased
+Stacked bar charts
+```{r}
+g <- ggplot_build(fetB_treemap)
+legend_metrics <- unique(dplyr::select(g$data[[1]], c("fill", "subgroup")))
+legend_vector <- as.vector(legend_metrics$fill) %>% setNames(legend_metrics$subgroup)
+
+png("Figures/FetB_interacome_barChart.png", width=350, height=500)
+ggplot(protLFQ_secM, aes(x=interaction, fill=Subsystem)) + geom_bar() +
+  theme(text=element_text(size=15)) + labs(x="Interaction w/ fetuin-B")
+  scale_fill_manual(values=legend_vector)
+
+dev.off()
+#ggplot(protLFQ_secM, aes(x=interaction, fill=Subsystem)) + geom_bar(position="fill")
+```
+Grouped bar chart
+```{r}
+ggplot(protLFQ_secM, aes(x=Subsystem, fill=interaction)) + geom_bar(position="dodge") + theme(axis.text.x = element_text(angle = 45, hjust=1)) + theme(text=element_text(size=16)) + scale_fill_manual(values=c("lightcoral", "lightgreen")) + labs(fill = "Interactions")
+```
+
+GSEA
+```{r}
+LFC.interactome <- protLFQ_secM$LFQ_FetB.vs.WT  %>% setNames(protLFQ_secM$geneName) %>% sort(decreasing = T)
+set.seed(18)
+gsea_secM.interactome <- GSEA(LFC.interactome, TERM2GENE=term2gene_gsea, verbose=FALSE, pvalueCutoff = 0.1, pAdjustMethod = 'BH')
+
+# cnet plot
+png("Figures/interactome_cnet.png", width=600, height=500)
+cnetplot(gsea_secM.interactome, categorySize='pvalue', foldChange = LFC.interactome, colorEdge=F, cex_gene=2, cex_category=2, cex_label_category=1.5) + 
+  ggplot2::labs(title = "GSEA NAFLD vs WT Interactome", subtitle="Secretory Pathway (Feizi)") +
+  theme(text=element_text(size=15))
+dev.off()
+
+# barplot
+x.interactome <- gsea_secM.interactome@result
+x.interactome$Description <- factor(x.interactome$Description, levels = x.interactome$Description[order(x.interactome$NES)])
+p=ggplot(x.interactome, # you can replace the numbers to the row number of pathway of your interest
+       aes(x = NES, y = Description)) +
+  geom_col(aes(fill = p.adjust)) +
+  theme_bw(base_size = 25) +
+  scale_fill_gradient(limits=c(0, 0.1), low="red", high="blue") +
+  ylab(NULL) +
+  ggplot2::labs(title = "GSEA NAFLD vs WT", subtitle="Feizi secM terms")
+
+```
+
+
+###################################################### 
+TRANSCRIPTOME
+######################################################
+
+Transciptome GSEA
+```{r}
+# Extract and name LFC
+LFC.transcriptome <- DE_secM$log2FoldChange[!is.na(DE_secM$symbol.sep)] %>%
+  setNames(DE_secM$symbol.sep[!is.na(DE_secM$symbol.sep)]) %>% sort(decreasing = T)
+
+set.seed(189)
+gsea_secM.transcriptome <- GSEA(LFC.transcriptome, TERM2GENE=term2gene_gsea, verbose=FALSE, pvalueCutoff = 0.05, pAdjustMethod = 'BH')
+
+# cnet plot
+png("Figures/transcriptome_cnet.png", width=600, height=500)
+cnetplot(gsea_secM.transcriptome, categorySize='pvalue', foldChange = LFC.transcriptome, colorEdge=F, cex_gene=2, cex_category=2, cex_label_category=1.5) + 
+  ggplot2::labs(title = "GSEA NAFLD vs WT Transcriptome", subtitle="Secretory Pathway (Feizi)") +
+  theme(text=element_text(size=15))
+dev.off()
+
+# barplot
+x.transcriptome <- gsea_secM.transcriptome@result
+x.transcriptome$Description <- factor(x.transcriptome$Description, levels = x.transcriptome$Description[order(x.transcriptome$NES)])
+p=ggplot(x.transcriptome, # you can replace the numbers to the row number of pathway of your interest
+       aes(x = NES, y = Description)) +
+  geom_col(aes(fill = p.adjust)) +
+  theme_bw(base_size = 25) +
+  scale_fill_gradient(limits=c(0, 0.1), low="red", high="blue") +
+  ylab(NULL) +
+  ggplot2::labs(title = "GSEA NAFLD vs WT", subtitle="Feizi secM terms")
+```
+
+Transciptome GSEA -- using only genes present in interactome
+```{r}
+LFC.ti <- LFC.transcriptome[names(LFC.transcriptome) %in% names(LFC.interactome)]
+
+set.seed(189)
+gsea_secM.ti <- GSEA(LFC.ti, TERM2GENE=term2gene_gsea, verbose=FALSE, pvalueCutoff = 0.1, pAdjustMethod = 'BH')
+#View(gsea_secM.transcriptome@result)
+#cnetplot(gsea_secM, categorySize='pvalue', foldChange = LFC, showCategory = 3, cex_label_category=10, cex_label_gene=10) 
+png("Figures/transcriptome_filter_cnet.png", width=600, height=500)
+cnetplot(gsea_secM.ti, categorySize='pvalue', foldChange = LFC.ti, colorEdge=F, cex_gene=2, cex_category=2, cex_label_category=1.5) + 
+  ggplot2::labs(title = "GSEA NAFLD vs WT Transcriptomics", subtitle="Secretory Pathway (Feizi)", 
+                caption = "Filtered to only incudes genes of fetuin-B interaction partners")  +
+  theme(text=element_text(size=15))
+dev.off()
+
+x.ti <- gsea_secM.ti@result
+x.ti$Description <- factor(x.ti$Description, levels = x.ti$Description[order(x.ti$NES)])
+p=ggplot(x.ti, # you can replace the numbers to the row number of pathway of your interest
+       aes(x = NES, y = Description)) +
+  geom_col(aes(fill = p.adjust)) +
+  theme_bw(base_size = 25) +
+  scale_fill_gradient(limits=c(0, 0.1), low="red", high="blue") +
+  ylab(NULL) +
+  ggplot2::labs(title = "GSEA NAFLD vs WT", subtitle="Feizi secM terms")
+```
+
+
+###################################################### 
+Interactome & Transcriptome
+######################################################
+
+Table of differential exp and interactions
+```{r}
+identical(protLFQ_secM$geneName, toupper(protLFQ_secM$geneName))
+identical(DE_secM$symbol.sep, toupper(DE_secM$symbol.sep))
+length(intersect(DE_secM$symbol.sep, protLFQ_secM$geneName))
+
+## table of DE interactions and DE genes
+geneExp.vs.interaction <- protLFQ_secM[, c("geneName", "Subsystem", "LFQ_FetB.vs.WT", "qvalue")] %>% dplyr::rename("interaction_LFQ" = "LFQ_FetB.vs.WT", "interaction_qvalue"="qvalue") %>%
+  left_join((DE_secM[, c("symbol.sep", "log2FoldChange", "padj")] %>% dplyr::rename("gene_LFC"="log2FoldChange", "gene_qvalue"="padj")), by=c("geneName"="symbol.sep"))
+
+#add annotation column
+geneExp.vs.interaction <- geneExp.vs.interaction[interaction_LFQ < 0 & gene_LFC < 0, int.vs.gene := "-/-"][interaction_LFQ > 0 & gene_LFC > 0, int.vs.gene := "+/+"][interaction_LFQ < 0 & gene_LFC > 0, int.vs.gene := "-/+"][interaction_LFQ > 0 & gene_LFC < 0, int.vs.gene := "+/-"][order(Subsystem),]
+
+fwrite(geneExp.vs.interaction, "Output/transcriptome.vs.interactome.csv")
+```
+
+Compare host response (transcriptomics) to Fet-B specific interactions (interactomics) of secretory pathway
+```{r}
+gsea.all <- x.transcriptome[, c("Description", "NES")] %>% mutate(data=rep("Host response", nrow(x.transcriptome))) %>%
+  rbind(x.interactome[, c("Description", "NES")] %>% mutate(data=rep("Fetuin-B interactions", nrow(x.interactome)))) %>% 
+  rbind(data.frame(Description="Dolichol pathway", NES=0, data="Fetuin-B interactions"))
+
+ggplot(gsea.all, aes(fill=data, y=NES, x=Description)) + 
+  geom_bar(position="dodge", stat="identity", width=0.5) + coord_flip() +
+  theme_bw(base_size = 18) + xlab("Secretory Pathway Subsystem")
+```
+
+igraph per subsystem
+```{r}
+library(igraph)
+## combine interactomics and transcriptomics data
+secM.allData <- left_join(protLFQ_secM, DE_secM[, -c("Subsystem")], by=c("geneName"="symbol.sep"))
+
+edge.df <- data.frame("node1"=rep("FETUB", nrow(secM.allData)), "node2"=secM.allData$geneName, "weight"=round(secM.allData$LFQ_FetB.vs.WT, digits=2), "interaction.sign"=secM.allData$interaction)
+vertex.df <- data.frame("node"=c("FETUB", secM.allData$geneName), "subsystem"=c("hepatokine", secM.allData$Subsystem), "LFC"=round(c(NA, secM.allData$log2FoldChange), digits = 2))
+secM.graph <- graph_from_data_frame(edge.df, directed=F, vertices=vertex.df)
+
+## add edge colors
+colfunc.edge <- colorRampPalette(c("red", "gray88", "royalblue"))
+#plot(rep(1,50),col=(colfunc(50)))
+edgeWeight.col <- data.frame(LFC=round(seq(-4.3, 4.3, 0.01), digits=2), color=colfunc.edge(length(seq(-4.3, 4.3, 0.01))))
+idx <- match(E(secM.graph)$weight, edgeWeight.col$LFC)
+identical(E(secM.graph)$weight, edgeWeight.col$LFC[idx])
+E(secM.graph)$col <- edgeWeight.col$color[idx]
+
+## add node colors
+colfunc.node <- colorRampPalette(c("red", "gray88", "royalblue"))
+nodeLFC.col <- data.frame(LFC=round(seq(-2, 2, 0.01), digits=2), color=colfunc.node(length(seq(-2, 2, 0.01))))
+idx <- match(V(secM.graph)$LFC, nodeLFC.col$LFC)
+identical(V(secM.graph)$LFC, nodeLFC.col$LFC[idx])
+V(secM.graph)$col <- nodeLFC.col$color[idx]
+# manually set color of FetB node
+V(secM.graph)$col[1] <- "white"
+```
+
+```{r}
+for (i in unique(protLFQ_secM$Subsystem)) {
+  subGraph <- induced_subgraph(secM.graph, which(V(secM.graph)$subsystem %in% c("hepatokine", i)))
+  set.seed(18)
+  la <- layout.star(subGraph)
+  if (length(V(subGraph)$name) < 4) {
+    par(mar = c(3,0,7,0))
+    plot(subGraph, main=i, edge.color=E(subGraph)$col, layout=la, vertex.label.color="black", vertex.label.cex=0.9, edge.width=5, vertex.label.dist=c(0, rep(3, length(V(subGraph)$name)-1)), vertex.color=V(subGraph)$col, vertex.label.font = c(4, rep(3, length(V(subGraph)$name)-1)))
+  }
+  else {
+    par(mar = c(3,0,7,0))
+    plot(subGraph, main=i, edge.color=E(subGraph)$col, layout=la, vertex.label="", vertex.label.color="black", vertex.label.cex=0.9, edge.width=5, vertex.color=V(subGraph)$col)
+  ## Apply labels manually
+  #Specify x and y coordinates of labels, adjust outward as desired
+  x = la[,1]*1.35
+  y = la[,2]*1.35
+
+  #create vector of angles for text based on number of nodes (flipping the orientation of the words half way around so none     appear upside down)
+  angle = ifelse(atan(-(la[,1]/la[,2]))*(180/pi) < 0,  90 + atan(-(la[,1]/la[,2]))*(180/pi), 270 + atan(-la[,1]/la[,2])*(180/pi))
+  angle[1]=0 #label for FETUB
+
+#Apply the text labels with a loop with angle as srt
+  vertex.label.font = c(4, rep(3, length(V(subGraph)$name)-1))
+for (i in 1:length(x)) {
+	text(x=x[i], y=y[i], labels=V(subGraph)$name[i], adj=NULL, pos=NULL, cex=.9, col="black", srt=angle[i], xpd=T, font=vertex.label.font[i])
+  }
+  }
+}
+#plot(secM.graph, vertex.label.color="black", vertex.frame.color=V(secM.graph)$color, vertex.size=8)
+```
+
+
+```{r}
+# Function to plot color bar
+color.bar <- function(lut, min, max=-min, nticks=11, ticks=seq(min, max, len=nticks), title='') {
+    scale = (length(lut)-1)/(max-min)
+
+    dev.new(width=1.75, height=5)
+    plot(c(0,10), c(min,max), type='n', bty='n', xaxt='n', xlab='', yaxt='n', ylab='', main=title,cex.main=2.3)
+    axis(2, ticks, las=1, cex.axis=1.8)
+    for (i in 1:(length(lut)-1)) {
+     y = (i-1)/scale + min
+     rect(0,y,10,y+1/scale, col=lut[i], border=NA)
+    }
+}
+
+color.bar(colfunc.edge(length(seq(-4.3, 4.3, 0.01))), -4.3, title="edge", ntick=3) # interactomics/edges
+color.bar(colfunc.node(length(seq(-2, 2, 0.01))), -2, title="node", ntick=3) # transcriptomics/nodes
+```
+

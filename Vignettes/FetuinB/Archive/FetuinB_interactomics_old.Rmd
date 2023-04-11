@@ -1,0 +1,101 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(org.Hs.eg.db)
+library(dplyr)
+library(data.table)
+```
+
+
+Prepare interactomics data for CellFie
+```{r}
+protLFQ <- readxl::read_excel("~/Desktop/SenateExam/Aim1_Reconstruction/FetuinAB_FALD/Input/Summary_Results_HEP.xlsx", sheet="Perseus")
+protLFQ<- data.table(protLFQ)[, c("Majority protein IDs", "TRAb_R1", "TRAb_R2", "TRAb_R3", "WTAb_R1", "WTAb_R2", "WTAb_R3")] %>% dplyr::rename("geneName"="Majority protein IDs")
+#note: can't include protein names because number of proteins names does NOT equal number of gene names for split
+protLFQ_parse <- mutate(protLFQ, id=1:nrow(protLFQ)) %>% tidyr::separate_rows(geneName, sep=";") %>% data.table() %>% na.omit()
+
+# Add column of entrez IDs
+length(intersect(protLFQ_parse$geneName, keys(org.Hs.eg.db, keytype="SYMBOL")))
+length(intersect(protLFQ_parse$geneName, keys(org.Hs.eg.db, keytype="ALIAS")))
+length(intersect(protLFQ_parse$geneName, keys(org.Hs.eg.db, keytype="UNIPROT")))
+entrezMap <- AnnotationDbi::select(org.Hs.eg.db, keys=protLFQ_parse$geneName, keytype = "UNIPROT", columns="ENTREZID") #if row has multiple gene names, only use first to map
+idx <- match(protLFQ_parse$geneName, entrezMap$UNIPROT)
+#View(data.frame(protGSEA$geneName, entrezMap$SYMBOL[idx])) #sanity check
+protLFQ_parse$Entrez <- entrezMap$ENTREZID[idx]
+
+#fwrite(protLFQ_parse[, -c("geneName", "id")] %>% dplyr::select(Entrez, everything()) %>% na.omit(), "~/Desktop/CellFIE_demoData/FetuinB_interactomics.csv")
+```
+
+###################################################### 
+CELLFIE ANALYSIS
+######################################################
+
+Load Cellfie results
+```{r}
+res.cellfie <- fread("FetuinB_output/interactome/mean/score.csv") %>% setNames(colnames(protLFQ_parse)[2:7])
+res.cellfie.binary <- fread("FetuinB_output/interactome/mean/score_binary.csv")
+taskInfo <-  openxlsx::read.xlsx("/Users/helenmasson/Desktop/SenateExam/Aim2_CellFie/SecPathway.CellFIE/usingGeM/Generate_essentialRxns_manual/essentialRxn_notebook2022.xlsx", sheet="TaskInfo")
+```
+
+Differential active task interactions
+```{r}
+welch.test <- matrixTests::row_t_welch(res.cellfie[, c("TRAb_R1", "TRAb_R2", "TRAb_R3")], res.cellfie[, c("WTAb_R1", "WTAb_R2", "WTAb_R3")]) %>% data.table() %>% cbind(taskInfo) %>% mutate(p.adjust := p.adjust(pvalue, method="BH")) %>% mutate(FC := mean.x/mean.y) %>% mutate(LFC := log2(FC))
+
+sig.tasks.1 <- welch.test[, c("mean.x", "mean.y", "mean.diff", "FC" ,"LFC", "p.adjust", "Task", "System", "Subsystem")] %>% filter(p.adjust <= 0.1) %>% filter(LFC <= -log2(1.25) | LFC >= log2(1.25))
+sig.tasks.05 <- welch.test[, c("mean.x", "mean.y", "mean.diff", "FC" ,"LFC", "p.adjust", "Task", "System", "Subsystem")] %>% filter(p.adjust <= 0.05) %>% filter(LFC <= -log2(1.25) | LFC >= log2(1.25))
+
+```
+Volcano plot
+```{r}
+selectLab.05 <- sig.tasks.05$Task
+selectLab.1 <- sig.tasks.1$Task
+EnhancedVolcano::EnhancedVolcano(welch.test, 
+                                 lab=welch.test$Task,
+                                 x= "LFC", 
+                                 y="p.adjust", 
+                                 pCutoff=0.1, 
+                                 FCcutoff = log2(1.25),
+                                 labSize = 4,
+                                 #labCol="black",
+                                 #labFace="bold",
+                                 title = "Secretory Pathway CellFie Volano Plot",
+                                 subtitle = 'NAFLD vs. WT',
+                                 ylim=c(0,5),
+                                 xlim = c(-1, 1),
+                                 pointSize = c(ifelse(welch.test$p.adjust<=0.1 & abs(welch.test$LFC) >= log2(1.25), 3, 1.7)),
+                                 caption = bquote("fold change cutoff: 1.25; FDR cutoff: 0.1"),
+                                 legendPosition = "right",
+                                 legendLabSize = 14,
+                                 colAlpha = 0.9,
+                                 #colGradient = c('red3', 'royalblue'),
+                                 drawConnectors = T,
+                                 widthConnectors = 0,
+                                 colConnectors = rgb(0, 0, 0, max = 1, alpha = 0, names = ""),
+                                 typeConnectors = "open",
+                                 ylab = bquote(~-Log[10] ~ italic(FDR)),
+                                 legendLabels = c("NS", expression(Log[2] ~ FC), "FDR", expression(FDR ~ and ~ log[2] ~ FC))
+                                 ) 
+```
+
+Heatmap of binary activity
+```{r}
+cellLine.labels <- c(paste0("NAFLD",1:3), paste0("WT", 1:3))
+
+res.cellfie.binary <- res.cellfie.binary %>% 
+  setNames(cellLine.labels) %>%  #setNames(colnames(TPM.raw)[-1]) %>%
+  as.matrix() %>% `rownames<-`(taskInfo$Task)
+
+
+pheatmap::pheatmap(res.cellfie.binary, 
+                   main="Secretory Pathway Activity", 
+                   col= c("black","white"),
+                   border_color = NA,
+                   annotation_col = data.frame(condition=c(rep("NAFLD", 3), rep("WT", 3))) %>% `rownames<-`(colnames(res.cellfie.binary)),
+                   show_colnames = F,
+                   annotation_row = data.frame(system=taskInfo$System) %>% `rownames<-`(rownames(res.cellfie.binary)),
+                   legend_breaks = c(0,1))
+```
+

@@ -1,4 +1,0 @@
-"0","ggraph(mygraph, 'partition', circular=TRUE) + "
-"0","  geom_node_arc_bar(aes(fill=depth), size=0.25) + "
-"0","  geom_node_text(aes(label = name), size=2.7) + "
-"0","  scale_fill_viridis()"

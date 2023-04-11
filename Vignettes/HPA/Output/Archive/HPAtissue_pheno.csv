@@ -1,0 +1,104 @@
+Sample ID,Donor,Immune cell
+940,a,eosinophil
+941,a,classical monocyte
+942,a,intermediate monocyte
+943,a,non-classical monocyte
+944,a,MAIT T-cell
+945,a,gdT-cell
+947,a,plasmacytoid DC
+948,a,myeloid DC
+949,a,naive B-cell
+950,a,memory CD8 T-cell
+951,a,NK-cell
+952,a,memory CD4 T-cell
+953,a,naive CD4 T-cell
+954,a,naive CD8 T-cell
+955,a,memory B-cell
+956,a,T-reg
+957,a,neutrophil
+958,b,classical monocyte
+959,b,eosinophil
+960,b,gdT-cell
+961,b,intermediate monocyte
+962,b,MAIT T-cell
+963,b,memory B-cell
+964,b,memory CD4 T-cell
+965,b,memory CD8 T-cell
+966,b,myeloid DC
+967,b,naive B-cell
+968,b,naive CD4 T-cell
+969,b,naive CD8 T-cell
+970,b,neutrophil
+971,b,NK-cell
+973,b,plasmacytoid DC
+975,b,T-reg
+976,c,basophil
+977,c,classical monocyte
+978,c,eosinophil
+979,c,gdT-cell
+980,c,intermediate monocyte
+981,c,MAIT T-cell
+982,c,memory B-cell
+983,c,memory CD4 T-cell
+984,c,memory CD8 T-cell
+985,c,myeloid DC
+986,c,naive B-cell
+987,c,naive CD4 T-cell
+988,c,naive CD8 T-cell
+989,c,neutrophil
+990,c,NK-cell
+991,c,non-classical monocyte
+992,c,plasmacytoid DC
+994,c,T-reg
+995,d,basophil
+996,d,classical monocyte
+997,d,eosinophil
+998,d,gdT-cell
+999,d,intermediate monocyte
+1000,d,MAIT T-cell
+1001,d,memory B-cell
+1002,d,memory CD4 T-cell
+1003,d,memory CD8 T-cell
+1004,d,myeloid DC
+1005,d,naive B-cell
+1006,d,naive CD4 T-cell
+1007,d,naive CD8 T-cell
+1008,d,neutrophil
+1009,d,NK-cell
+1010,d,non-classical monocyte
+1011,d,plasmacytoid DC
+1013,d,T-reg
+1015,e,gdT-cell
+1016,e,eosinophil
+1017,e,neutrophil
+1018,e,classical monocyte
+1019,e,intermediate monocyte
+1020,e,non-classical monocyte
+1021,e,MAIT T-cell
+1022,e,basophil
+1023,e,naive CD4 T-cell
+1024,e,memory CD4 T-cell
+1025,e,naive CD8 T-cell
+1027,e,plasmacytoid DC
+1028,e,myeloid DC
+1029,e,naive B-cell
+1030,e,memory B-cell
+1031,e,NK-cell
+1032,e,T-reg
+1034,f,neutrophil
+1035,f,MAIT T-cell
+1036,f,gdT-cell
+1037,f,plasmacytoid DC
+1039,f,eosinophil
+1040,f,basophil
+1041,f,NK-cell
+1042,f,naive B-cell
+1043,f,memory B-cell
+1044,f,T-reg
+1045,f,classical monocyte
+1046,f,intermediate monocyte
+1047,f,non-classical monocyte
+1048,f,naive CD8 T-cell
+1049,f,memory CD8 T-cell
+1050,f,naive CD4 T-cell
+1051,f,memory CD4 T-cell

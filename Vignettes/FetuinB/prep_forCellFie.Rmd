@@ -1,0 +1,48 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Remove any/all packages from previous work
+```{r}
+lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE)
+```
+
+```{r}
+library(feather)
+library(data.table)
+library(openxlsx)
+library(dplyr)
+library(tidyr)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+```
+
+###################################################### 
+Prepare transcriptomics data for CellFie
+######################################################
+
+Load Curtis DESeq results
+```{r}
+DE <-fread("Input/DE.csv")
+#### add column of entrez IDs
+entrezMap <- AnnotationDbi::select(org.Hs.eg.db, keys=DE$symbol.sep, keytype = "SYMBOL", columns="ENTREZID") #if row has multiple gene names, only use first to map
+idx <- match(DE$symbol.sep, entrezMap$SYMBOL)
+DE$Entrez <- entrezMap$ENTREZID[idx]
+```
+
+Load raw TPMs
+```{r}
+TPM <- read_feather("Input/abund.feather")
+```
+
+filter TPM to only include genes in DE and add column of entrez ID
+This will be used for CellFIE analysis
+```{r}
+TPM.cellfie <- left_join(TPM, dplyr::select(DE, c("symbol.sep", "Entrez")), by=c("geneSymbol"="symbol.sep")) %>%
+  na.omit() %>%
+  dplyr::select(Entrez, everything()) %>%
+  dplyr::select(-geneSymbol) %>%
+  fwrite("Output/TPM.FetuinB.csv")
+```
+

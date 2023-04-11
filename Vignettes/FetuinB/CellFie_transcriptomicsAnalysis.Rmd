@@ -1,0 +1,341 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE)
+```
+
+```{r}
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(treemapify)
+library(RColorBrewer)
+library(factoextra)
+library(ReactomePA)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(enrichplot)
+library(ggraph)
+library(tidygraph)
+```
+
+Load Curtis DESeq results
+```{r}
+DE <-fread("Input/DE.csv")
+DEsig_0.05 <- DE[padj < 0.05 & abs(log2FoldChange) > log2(1.5)]
+```
+
+Load TPM data
+```{r}
+TPM.raw <- feather::read_feather("Input/abund.feather") 
+TPM.cellfie <- fread("Input/Archive/TPM.FetuinB_pre.csv") # filtered to only include genes used in CellFie analysis
+```
+
+
+###################################################### 
+CELLFIE ANALYSIS
+######################################################
+
+Load Cellfie results
+```{r}
+res.cellfie <- fread("CellFie_output/transcriptome/local_mean/score.csv") %>% setNames(c("NAFLD_R1", "NAFLD_R2", "NAFLD_R3", "WT_R1", "WT_R2", "WT_R3"))
+taskInfo <-  fread("CellFie_output/transcriptome/local_mean/taskInfo.csv") %>%
+  mutate(Pathway = case_when(stringr::str_detect(taskInfos1, "sec_") ~ 'Secretory',
+         !stringr::str_detect(taskInfos1, "sec_") ~ 'Metabolism')) %>%
+  setNames(c("taskID", "Task", "System", "Subsystem", "Pathway"))
+detail.scoring <- fread("CellFie_output/transcriptome/local_mean/detailScoring.csv")
+
+# Met only
+res.cellfie.met <- cbind(taskInfo, res.cellfie) %>%
+  filter(Pathway=="Metabolic")
+taskInfo.met <- filter(taskInfo, Pathway=="Metabolic")
+
+# Sec only
+res.cellfie.sec <- cbind(taskInfo, res.cellfie) %>%
+  filter(Pathway=="Secretory")
+taskInfo.sec <- filter(taskInfo, Pathway=="Secretory")
+
+# Cell line labels and colors
+cellLine.labels <- as.factor(c(rep("NAFLD",3), rep("WT", 3)))
+cellLine_col <- brewer.pal(2,"Dark2")[as.numeric(cellLine.labels)]
+
+```
+
+Differentially active tasks
+```{r}
+welch.test <- matrixTests::row_t_welch(res.cellfie.sec[, c("NAFLD_R1", "NAFLD_R2", "NAFLD_R3")], res.cellfie.sec[, c("WT_R1", "WT_R2", "WT_R3")]) %>% data.table() %>% cbind(taskInfo.sec) %>% mutate(p.adjust := p.adjust(pvalue, method="BH")) %>% mutate(FC := mean.x/mean.y) %>% mutate(LFC := log2(FC))
+welch.test <- welch.test[, c("mean.x", "mean.y", "mean.diff", "FC" ,"LFC", "p.adjust", "Task", "System", "Subsystem", "Pathway")]
+
+
+sig.tasks<- welch.test[, c("mean.x", "mean.y", "mean.diff", "FC" ,"LFC", "p.adjust", "Task", "System", "Subsystem", "Pathway")] %>% 
+  filter(p.adjust <= 0.1) %>% 
+  filter(LFC <= -log2(1.25) | LFC >= log2(1.25))
+
+```
+
+Volcano plot
+```{r}
+#selectLab <- sig.tasks$Task
+
+selectLab <- paste0("italic('", sig.tasks$Task, "')")
+
+png("Figures/volcano_cellFieTranscriptome.png", width=750, height=800)
+EnhancedVolcano::EnhancedVolcano(welch.test, 
+                                 lab=welch.test$Task,
+                                 x= "LFC", 
+                                 y="p.adjust", 
+                                 axisLabSize = 30,
+                                 pCutoff=0.1, 
+                                 FCcutoff = log2(1.25),
+                                 labSize = 8,
+                                 title = "Secretory Pathway CellFie Volano Plot",
+                                 titleLabSize = 30,
+                                 subtitle = bquote(italic('NAFLD vs. WT')),
+                                 subtitleLabSize = 28,
+                                 ylim=c(0,5),
+                                 xlim = c(-1, 1),
+                                 pointSize = c(ifelse(welch.test$p.adjust<=0.1 & abs(welch.test$LFC) >= log2(1.25), 10, 5)),
+                                 caption = bquote("fold change cutoff: 1.25; FDR cutoff: 0.1"),
+                                 captionLabSize = 25,
+                                 legendPosition = "bottom",
+                                 legendLabSize = 28,
+                                 colAlpha = 0.9,
+                                 drawConnectors = T,
+                                 widthConnectors = 0,
+                                 colConnectors = rgb(0, 0, 0, max = 1, alpha = 0, names = ""),
+                                 typeConnectors = "open",
+                                 ylab = expression("-Log"[10]*" FDR"),
+                                 legendLabels = c("NS", expression(Log[2] ~ FC), "FDR", expression(FDR ~ and ~ log[2] ~ FC))
+                                 ) 
+dev.off()
+```
+
+###################################################### 
+PCA
+######################################################
+
+PCA using CellFie
+```{r}
+### prepare expression data for PCA
+cellfie.matrix <- dplyr::select(res.cellfie.sec, c("NAFLD_R1", "NAFLD_R2", "NAFLD_R3", "WT_R1", "WT_R2", "WT_R3")) %>% as.matrix() %>% `rownames<-`(taskInfo.sec$Task)
+# remove constant/zero columns
+cellfie.matrix <- cellfie.matrix[matrixStats::rowSds(cellfie.matrix) != 0 ,]
+
+# PCA
+res.pca <- prcomp(t(cellfie.matrix), scale=T)
+
+# visualize eigenvalues/variances
+fviz_screeplot(res.pca, addlabels=T, ylim = c(0, 100))
+
+# plot individuals on first two components
+fviz_pca_biplot(res.pca,
+             geom.ind = c("text", "point"),
+             select.var = list(contrib = 4),
+             col.var="gray59",
+             #jitter = list(what = "label", height=0.2),
+             arrowsize = 1,
+             labelsize = 6,
+             label="var",
+             pointsize = 5,
+             mean.point = FALSE,
+             show.legend=FALSE,
+             habillage = as.factor(cellLine.labels),
+             palette = "Dark2",
+             legend.title = "Condition",
+             repel = TRUE     # Avoid text overlapping
+) + theme(text=element_text(size=10), axis.text = element_text(size = 18), axis.title =
+                           element_text(size = 18), legend.text = element_text(size = 18), legend.title =
+                           element_text(size = 18), plot.title = element_text(size = 22)) +
+  # ADD ggforce's ellipses
+ ggforce::geom_mark_ellipse(aes(fill = cellLine.labels, color=cellLine.labels)) + #color = cellLine_col
+  labs(title="Principal Component Analysis") + ylim(-4,4)
+
+```
+
+
+###################################################### 
+Compare interactome with significant CellFie Tasks
+######################################################
+
+Load interacomics data
+```{r}
+## Raw LFQ data from Caressa
+protLFQ <- readxl::read_excel("Input/Summary_Results_HEP.xlsx", sheet="Perseus")
+protLFQ_trim <- data.table(protLFQ)[, c("Gene names","Welch's T-test Difference LFQ intensity TRAb_LFQ intensity WTAb", "Welch's T-test q-value LFQ intensity TRAb_LFQ intensity WTAb")] %>% setNames(c("geneName", "LFQ_FetB.vs.WT", "qvalue"))
+#note: can't include protein names because number of proteins names does NOT equal number of gene names for split
+protLFQ_parse <- mutate(protLFQ_trim, id=as.character(1:nrow(protLFQ_trim))) %>% tidyr::separate_rows(geneName, sep=";") %>% data.table()
+protLFQ_sig <- protLFQ_parse[qvalue <= 0.1 & abs(LFQ_FetB.vs.WT) >= log2(1.5) ,][order(LFQ_FetB.vs.WT)]
+
+## Raw interactomics data used for CellFie
+interactome_raw <- fread("Output/FetuinB_interactomics.csv") %>% 
+  setNames(c("Entrez", "NAFLD_R1", "NAFLD_R2", "NAFLD_R3", "WT_R1", "WT_R2", "WT_R3"))
+
+## gene map (entrez - gene name)
+entrezMap <- AnnotationDbi::select(org.Hs.eg.db, keys=as.character(interactome_raw$Entrez), keytype = "ENTREZID", columns="SYMBOL")
+```
+
+Load essential reactions data
+```{r}
+essRxn <- openxlsx::read.xlsx("../../usingGeM/Generate_essentialRxns_manual/essentialRxn_final2022.xlsx", sheet="Human.tasks")
+```
+
+Function to extract genes from Task GPR rules
+```{r}
+# extract all genes from GPR rules
+parseGenes <- function(Task.df) {
+  parseGPR.list <- stringr::str_extract_all(Task.df$`Gene.Protein.Reaction.(GPR).association.(Entrez.Gene.IDs)`, "\\d+") %>% 
+  `names<-`(Task.df$Reaction.abbreviation)
+  genes <- unlist(parseGPR.list, use.names=F)  %>% unique() %>% as.integer()
+  return(genes)
+}
+```
+
+List of tasks
+```{r}
+cnet.list <- list()
+
+## Vesicle secretion
+VS <- filter(essRxn, Task=="Vesicle secretion") %>% parseGenes()
+cnet.list[["Vesicle secretion"]] <- filter(interactome_raw, Entrez %in% intersect(VS, interactome_raw$Entrez)) %>%
+  mutate(Entrez=as.character(Entrez)) %>%
+  left_join(entrezMap, by=c("Entrez"="ENTREZID")) %>%
+  left_join(protLFQ_parse, by=c("SYMBOL"="geneName"))
+
+## N-glycan processing (ER)
+NG <- filter(essRxn, Task=="N-glycan processing (ER)") %>% parseGenes()
+cnet.list[["N-glycan processing (ER)"]] <- filter(interactome_raw, Entrez %in% intersect(NG, interactome_raw$Entrez)) %>% 
+  mutate(Entrez=as.character(Entrez)) %>%
+  left_join(entrezMap, by=c("Entrez"="ENTREZID")) %>%
+  left_join(protLFQ_parse, by=c("SYMBOL"="geneName"))
+
+## Calnexin/calreticulin cycle
+CAL <- filter(essRxn, Task=="Calnexin/calreticulin cycle") %>% parseGenes()
+cnet.list[["Calnexin/calreticulin cycle"]] <- filter(interactome_raw, Entrez %in% intersect(CAL, interactome_raw$Entrez)) %>%
+  mutate(Entrez=as.character(Entrez)) %>%
+  left_join(entrezMap, by=c("Entrez"="ENTREZID")) %>%
+  left_join(protLFQ_parse, by=c("SYMBOL"="geneName"))
+
+## Trafficking to endosomes
+ENDO <- filter(essRxn, Task=="Trafficking to endosomes (Clathrin Vesicles)") %>% parseGenes()
+cnet.list[["Trafficking to endosomes (Clathrin Vesicles)"]] <- filter(interactome_raw, Entrez %in% intersect(ENDO, interactome_raw$Entrez)) %>% 
+  mutate(Entrez=as.character(Entrez)) %>%
+  left_join(entrezMap, by=c("Entrez"="ENTREZID")) %>%
+  left_join(protLFQ_parse, by=c("SYMBOL"="geneName"))
+
+cnet.df <- rbindlist(cnet.list, idcol="Task")
+cnet.genes <- filter(DE, symbol.sep %in% cnet.df$SYMBOL) %>% unique() %>%
+  dplyr::select(c("symbol.sep", "log2FoldChange", "padj")) 
+```
+
+
+```{r}
+cnet.edge <- data.frame(from=cnet.df$Task, to=cnet.df$SYMBOL, interaction_strength=cnet.df$LFQ_FetB.vs.WT)
+cnet.node <- dplyr::select(sig.tasks, c("Task", "LFC", "p.adjust")) %>% 
+  setNames(names(cnet.genes)) %>%
+  mutate(size=rep(9, nrow(sig.tasks))) %>%
+  mutate(font=rep("bold", nrow(sig.tasks))) %>%
+  rbind(cnet.genes %>% mutate(size=rep(6, nrow(cnet.genes))) %>% mutate(font=rep("italic", nrow(cnet.genes))))
+
+graph <- igraph::graph_from_data_frame(cnet.edge, directed=FALSE, vertices=cnet.node)
+```
+
+```{r}
+png("Figures/sigTask_interactome_nodeGradient.png", width=750, height=600)
+set.seed(18)
+ggraph(graph, layout="fr") +
+  geom_edge_link(aes(color=interaction_strength), width=1.5) +
+  geom_node_point(aes(size=size, color=log2FoldChange)) +
+  scale_size_continuous(range = c(4, 12)) +
+  geom_node_text(aes(label=name, fontface=font, size=6.8), repel=T) +
+  scale_edge_colour_gradient2(low="red", mid='white', high="blue", name="Edge LFQ") +
+  scale_colour_gradient2(low="red", mid='white', high="blue", name="Node LFC") +
+  theme_void() +
+  theme(text=element_text(size=22)) +
+  guides(size=FALSE)
+dev.off()
+```
+
+
+###################################################### 
+Heatmap of CellFie Scores
+######################################################
+
+```{r}
+### prepare expression data
+cellfie.matrix <- dplyr::select(res.cellfie, c("NAFLD_R1", "NAFLD_R2", "NAFLD_R3", "WT_R1", "WT_R2", "WT_R3")) %>% as.matrix() %>% `rownames<-`(taskInfo$Task)
+# remove constant/zero columns
+cellfie.matrix <- cellfie.matrix[matrixStats::rowSds(cellfie.matrix) != 0 ,]
+
+```
+
+```{r}
+png("Figures/hmap_tasks.png", width=550, height=550)
+hmap2 <- pheatmap::pheatmap(cellfie.matrix,
+                   scale="row",
+                   color=colorRampPalette((c("red", "white", "blue")))(50),
+                   cluster_rows = T, 
+                   cluster_cols = T,
+                   show_rownames = F,
+                   cutree_cols = 2,
+                   cutree_rows = 2,
+                   treeheight_row = 0,
+                   annotation_row = dplyr::select(clust.samples, c("Cluster")) %>% `rownames<-`(clust.samples$Task),
+                   annotation_colors = list(Cluster=c("darkorchid1", "darkorange") %>% setNames(c("A", "B"))),
+                   main="Clustered heatmap of CellFie scores",
+                   fontsize=15,
+                   angle_col = 45,
+                   cellwidth = 60)
+dev.off()
+```
+
+hypergeometric enrichment per cluster
+```{r}
+set.seed(18)
+enrich_clusterA <- clusterProfiler::enricher(gene = clust.samples$Task[clust.samples$Cluster=="A"],
+                                             TERM2GENE = dplyr::select(taskInfo, c("Subsystem", "Task")) %>%
+                                               rbind(dplyr::select(taskInfo, c("System", "Task")), use.names=F),
+                                             universe = clust.samples$Task,
+                                             #minGSSize = 3,
+                                             pAdjustMethod = "BH",
+                                             pvalueCutoff = 0.05,
+                                             qvalueCutoff = 0.1)
+View(data.table(enrich_clusterA@result)[p.adjust <= 0.1 ,])
+
+set.seed(18)
+enrich_clusterB <- clusterProfiler::enricher(gene = clust.samples$Task[clust.samples$Cluster=="B"],
+                                             TERM2GENE = dplyr::select(taskInfo, c("Subsystem", "Task")) %>%
+                                               rbind(dplyr::select(taskInfo, c("System", "Task")), use.names=F),
+                                             universe = clust.samples$Task,
+                                             #minGSSize = 3,
+                                             pAdjustMethod = "BH",
+                                             pvalueCutoff = 0.05,
+                                             qvalueCutoff = 0.1)
+View(data.table(enrich_clusterB@result)[p.adjust <= 0.1 ,])
+```
+
+```{r}
+enrich.res <- (data.table(enrich_clusterA@result)[p.adjust <= 0.1 ,] %>% mutate(Cluster="A")) %>% arrange(-Count) %>%
+  rbind(data.table(enrich_clusterB@result)[p.adjust <= 0.1 ,] %>% mutate(Cluster="B")) %>% 
+  mutate(FDR=paste("FDR =", formatC(p.adjust, format="e", digits=2))) %>% 
+  mutate(term_count=sub("/.*","" , BgRatio)) %>%
+  mutate(percent=(Count/as.integer(term_count))*100)
+enrich.res$ID <- factor(enrich.res$ID, levels=rev(enrich.res$ID))
+
+png("Figures/bar_enrichTasks.png", width=680, height=400)
+ggplot(enrich.res, aes(x=ID, y=percent, fill=Cluster)) +
+  geom_bar(stat="identity") +
+  ylab("% tasks") +
+  geom_text(aes(label = FDR), vjust = 0, hjust=1.1, size=4.5) +
+  coord_flip() +
+  labs(title="Hypergeometric Enrichment of Clusters") +
+  scale_fill_manual(values=c("darkorchid1", "darkorange")) +
+  theme_classic() +
+  theme(text=element_text(size=17), axis.title.y = element_blank(), legend.position = "none",
+        plot.title = element_text(size = 20, face = "bold"))
+  #facet_wrap(~Cluster, scales="free")
+dev.off()
+```
+

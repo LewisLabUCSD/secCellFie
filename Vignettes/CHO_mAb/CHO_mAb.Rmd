@@ -1,0 +1,589 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Clear packages
+```{r}
+lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE)
+```
+
+Load packages
+```{r}
+library(dplyr)
+library(data.table)
+library(factoextra)
+library(ggplot2)
+```
+
+Load pheno and count data
+```{r}
+#pheno data
+pheno <- openxlsx::read.xlsx("Input/Susan_Annotations.xlsx", sheet="clean") %>%
+  mutate(condition_state = paste0(condition, "_", state))
+
+#count data
+counts <- fread("Input/count_clean.csv")
+count.matrix <- as.matrix(counts[, -1]) %>% `rownames<-`(counts$entrezID) %>% na.omit()
+```
+
+Load Cellfie results
+```{r}
+res.cellfie <- fread("CellFie_output/local_minmaxmean/score.csv") %>% setNames(colnames(counts)[-1])
+res.cellfie.binary <- fread("CellFie_output/local_minmaxmean/score_binary.csv") %>% setNames(colnames(counts)[-1])
+taskInfo <- fread("CellFie_output/local_minmaxmean/taskInfo.csv") %>%
+  mutate(Pathway = case_when(stringr::str_detect(taskInfos1, "sec_") ~ 'Secretory',
+         !stringr::str_detect(taskInfos1, "sec_") ~ 'Metabolism')) %>%
+  setNames(c("taskID", "Task", "System", "Subsystem", "Pathway"))
+res.cellfie.filter <- res.cellfie * res.cellfie.binary 
+```
+
+############################################################################
+Normalization
+############################################################################
+Samples CHO-Core-8 & CHO-Core-16 appear to skew from the ref line
+To normalize, mult/divide by the slope of the best fit line
+
+Function
+```{r}
+viz.samples <- function(condition, data) {
+  sample.names <- pheno$sample.id[pheno$condition_state==condition]
+  sample.pairs <- t(combn(sample.names,2))
+  data.plot <- apply(sample.pairs, 1, function(i)
+    {data.frame(x=select(data, i[1]), y=select(data,i[2]), pair=paste0(i[1],i[2])) %>% setNames(c("x", "y", "pair"))}) %>%
+    dplyr::bind_rows()
+  ggplot(data.plot, aes(x,y)) +
+    geom_point(aes(color=pair, alpha=0.7)) +
+    geom_abline(intercept = 0, slope = 1) + 
+    theme(text=element_text(size=14)) +
+    ggtitle(condition)
+  } 
+
+```
+
+Plot pre-normalization for Supp Material
+```{r}
+png("Figures/rProtein_b4Norm.png", width=1100, height=700)
+ggpubr::ggarrange(viz.samples("A0_EXP", data=res.cellfie), 
+          viz.samples("A0_STA", data=res.cellfie),
+          viz.samples("A1_EXP", data=res.cellfie),
+          viz.samples("A1_STA", data=res.cellfie),
+          labels= c("A", "B", "C", "D"),
+          ncol=2, nrow=2)
+dev.off()
+```
+
+Normalization
+```{r}
+m.8 <- coef(lm(res.cellfie$`CHO-Core-1`~res.cellfie$`CHO-Core-8`))
+m.16 <- coef(lm(res.cellfie$`CHO-Core-16`~res.cellfie$`CHO-Core-17`))
+
+res.cellfie.norm <- res.cellfie %>% mutate("CHO-Core-8"=`CHO-Core-8`*m.8[2]) %>%
+  mutate("CHO-Core-16"=`CHO-Core-16`/m.16[2])
+
+## sec only
+sec.cellfie <- mutate(res.cellfie.norm, Task=taskInfo$Task, Pathway=taskInfo$Pathway) %>% 
+  filter(Pathway=="Secretory") %>% select(-Pathway)
+
+## met only
+met.cellfie <- mutate(res.cellfie.norm, Task=taskInfo$Task, Pathway=taskInfo$Pathway) %>% 
+  filter(Pathway=="Metabolism") %>% select(-Pathway)
+
+rm(m.8)
+rm(m.16)
+```
+
+Plot post-normalization for Supp Material
+```{r}
+png("Figures/rProtein_afterNorm.png", width=1100, height=700)
+ggpubr::ggarrange(viz.samples("A0_EXP", data=res.cellfie.norm),
+                  viz.samples("A0_STA", data=res.cellfie.norm),
+                  viz.samples("A1_EXP", data=res.cellfie.norm),
+                  viz.samples("A1_STA", data=res.cellfie.norm),
+                  labels= c("A", "B", "C", "D"),
+                  ncol=2, nrow=2)
+dev.off()
+```
+
+############################################################################
+PCA
+############################################################################
+
+Function
+```{r}
+PCA.plots <- function(matrix, pheno){
+  # log transform
+  matrix <- log2(matrix+0.001)
+  # remove constant/zero columns
+  matrix <- matrix[matrixStats::rowSds(matrix) != 0 ,]
+  # PCA
+  res.pca <- prcomp(t(matrix), center=T, scale=T) #, scale=T, center=T
+  # visualize eigenvalues/variances
+  ross <- fviz_screeplot(res.pca, addlabels=T, ylim = c(0, 100))
+  # plot individuals on first two components
+  ian <- fviz_pca_ind(res.pca,
+               geom.ind = c("text", "point"), #c("text", "point")
+               pointsize = 3,
+               mean.point = FALSE,
+               show.legend=FALSE,
+               habillage = as.factor(pheno$condition_state),
+               #palette = "Dark2",
+               legend.title = "condition",
+               repel = TRUE     # Avoid text overlapping
+               ) + theme(text=element_text(size=4), axis.text = element_text(size = 10), axis.title =
+                           element_text(size = 10), legend.text = element_text(size = 10), legend.title =
+                           element_text(size = 10), plot.title = element_text(size = 20))
+  return(list(results=res.pca, screeplot=ross, pca=ian))
+}
+```
+
+PCA using sec+met CellFie
+```{r}
+cellfie.matrix <- mutate(res.cellfie.norm, Task=taskInfo$Task) %>%
+  filter(`CHO-Core-1` >0) %>% # filter out -1 tasks (unable to calculate due to missing gene info)
+  as.matrix(rownames="Task")
+PCA.cellfie <- PCA.plots(cellfie.matrix, pheno=pheno)
+
+png("Figures/cellfie_PCAbiplot.png", width=620, height=480)
+fviz_pca_biplot(PCA.cellfie$results,
+                select.var = list(contrib = 4),
+                label="var",
+                labelsize = 6,
+                #col.var = "black",
+                geom.ind = c("text", "point"),
+                pointsize = 4,
+                mean.point = FALSE,
+                show.legend=FALSE,
+                habillage = as.factor(pheno$condition_state),
+                legend.title = "condition",
+                repel = TRUE) + theme(text=element_text(size=10), axis.text = element_text(size = 18), axis.title =
+                           element_text(size = 18), legend.text = element_text(size = 18), legend.title =
+                           element_text(size = 18), plot.title = element_text(size = 22)) +
+  scale_shape_manual(values=c(19,15,17,18)) +
+  # ADD ggforce's ellipses
+  ggforce::geom_mark_ellipse(aes(fill = pheno$condition_state,
+                        color = pheno$condition_state), alpha=0.2) + ylim (-12, 9) + 
+  labs(title="Principal Component Analysis")
+dev.off()
+
+png("Figures/cellfie_PCA.png", width=620, height=480)
+fviz_pca_ind(PCA.cellfie$results,
+               geom.ind = c("point"), #c("text", "point")
+               pointsize = 5,
+               mean.point = F,
+               show.legend=FALSE,
+               habillage = as.factor(pheno$condition_state),
+               legend.title = "condition",
+               repel = TRUE     # Avoid text overlapping
+               ) + theme(text=element_text(size=10), axis.text = element_text(size = 18), axis.title =
+                           element_text(size = 18), legend.text = element_text(size = 18), legend.title =
+                           element_text(size = 18), plot.title = element_text(size = 22)) +
+  scale_shape_manual(values=c(19,15,17,18)) +
+  # ADD ggforce's ellipses
+  ggforce::geom_mark_ellipse(aes(fill = pheno$condition_state,
+                        color = pheno$condition_state)) + ylim (-12, 9) + 
+  labs(title="Principal Component Analysis")
+dev.off()
+```
+
+PCA using sec CellFie only
+```{r}
+### sec Cellfie
+cellfie.matrix.sec <- filter(sec.cellfie,`CHO-Core-1` >0) %>%
+  as.matrix(rownames="Task")
+PCA.cellfie.sec <- PCA.plots(cellfie.matrix.sec, pheno=pheno)
+
+png("Figures/secCellfie_biplot.png", width=620, height=480)
+fviz_pca_biplot(PCA.cellfie.sec$results,
+                select.var = list(contrib = 4),
+                labelsize = 5,
+                col.var="gray59",
+               geom.ind = c("point"), #c("text", "point")
+               pointsize = 5,
+               mean.point = F,
+               show.legend=FALSE,
+               habillage = as.factor(pheno$condition_state),
+               #palette = "Dark2",
+               legend.title = "condition",
+               repel = TRUE     # Avoid text overlapping
+               ) + theme(text=element_text(size=10), axis.text = element_text(size = 18), axis.title =
+                           element_text(size = 18), legend.text = element_text(size = 18), legend.title =
+                           element_text(size = 18), plot.title = element_text(size = 22)) +
+  labs(title="Principal Component Analysis", subtitle = "Secretory Pathway") +
+  scale_shape_manual(values=c(19,15,17,18)) +
+  theme(plot.subtitle = element_text(size=15, face = "italic"))
+dev.off()
+
+png("Figures/secCellfie_PCA.png", width=620, height=480)
+fviz_pca_ind(PCA.cellfie.sec$results,
+               geom.ind = c("point"), #c("text", "point")
+               pointsize = 5,
+               mean.point = F,
+               show.legend=FALSE,
+               habillage = as.factor(pheno$condition_state),
+               legend.title = "condition",
+               repel = TRUE     # Avoid text overlapping
+               ) + theme(text=element_text(size=10), axis.text = element_text(size = 18), axis.title =
+                           element_text(size = 18), legend.text = element_text(size = 18), legend.title =
+                           element_text(size = 18), plot.title = element_text(size = 22)) +
+  labs(title="Principal Component Analysis", subtitle = "Secretory Pathway") +
+  scale_shape_manual(values=c(19,15,17,18)) +
+  theme(plot.subtitle = element_text(size=15, face = "italic"))
+dev.off()
+
+```
+
+PCA using met CellFie only
+```{r}
+### met Cellfie
+cellfie.matrix.met <- filter(met.cellfie,`CHO-Core-1` >0) %>%
+  as.matrix(rownames="Task")
+PCA.cellfie.met <- PCA.plots(cellfie.matrix.met, pheno=pheno)
+```
+
+Plot loadings of PC1 
+```{r}
+## secretory scores only
+PC1.sec <- as.data.frame(PCA.cellfie.sec$results$rotation) %>%
+  tibble::rownames_to_column(var="Task") %>% select(c("Task", "PC1")) %>%
+  arrange(PC1)
+level.order <- arrange(PC1.sec, PC1)
+PC1.sec <- mutate(PC1.sec, Task=factor(Task, levels=level.order$Task))
+
+png("Figures/PC1sec_loadings.png", width=580, height=480)
+ggplot(PC1.sec, aes(PC1, Task, fill=PC1)) +
+  geom_bar(stat="identity") +
+  ggtitle("PC1 Loadings") +
+  scale_fill_gradient2(low=scales::muted("red"), mid="white", high=scales::muted("green"), name="Loading") +
+  theme_linedraw() +
+  theme(text=element_text(size=19), axis.title.y=element_blank(), axis.title.x=element_blank())
+dev.off()
+
+## met and sec scores
+PC1 <- as.data.frame(PCA.cellfie$results$rotation) %>%
+  tibble::rownames_to_column(var="Task") %>% select(c("Task", "PC1")) %>%
+  arrange(PC1)
+PC1.subset <- rbind(PC1[1:10,], PC1[(204-9):204,])
+level.order <- arrange(PC1.subset, PC1)
+PC1.subset <- mutate(PC1.subset, Task=factor(Task, levels=level.order$Task))
+
+```
+
+Plot loadings of PC2 
+```{r}
+## met and sec scores
+PC2 <- as.data.frame(PCA.cellfie$results$rotation) %>%
+  tibble::rownames_to_column(var="Task") %>% select(c("Task", "PC2")) %>%
+  arrange(PC2)
+PC2.subset <- rbind(PC2[1:10,], PC2[(204-9):204,])
+level.order <- arrange(PC2.subset, PC2)
+PC2.subset <- mutate(PC2.subset, Task=factor(Task, levels=level.order$Task))
+
+## secretory scores only
+PC2.sec <- as.data.frame(PCA.cellfie$results$rotation) %>%
+  tibble::rownames_to_column(var="Task") %>% select(c("Task", "PC2")) %>%
+  left_join(taskInfo) %>%
+  filter(Pathway=="Secretory") %>%
+  arrange(PC2)
+level.order <- arrange(PC2.sec, PC2)
+PC2.sec <- mutate(PC2.sec, Task=factor(Task, levels=level.order$Task))
+
+png("Figures/PC2sec_loadings.png", width=640, height=480)
+ggplot(PC2.sec, aes(PC2, Task, fill=PC2)) +
+  geom_bar(stat="identity") +
+  ggtitle("PC2 Secretory Task Loadings") +
+  scale_fill_gradient2(low=scales::muted("purple"), mid="white", high=scales::muted("green"), name="Loading") +
+  theme_linedraw() +
+  theme(text=element_text(size=19), axis.title.y=element_blank(), axis.title.x=element_blank())
+dev.off()
+```
+
+ 
+Clevland plot to show loadings of all secretory tasks on both PC1 and PC2
+```{r}
+PC1.sec <- left_join(PC1, taskInfo) %>%
+  filter(Pathway=="Secretory") %>% 
+  rename(Loading=PC1) %>% mutate(PC="PC1")
+PC2.sec <- left_join(PC2, taskInfo) %>%
+  filter(Pathway=="Secretory") %>% 
+  rename(Loading=PC2) %>% mutate(PC="PC2")
+
+#level.order <- arrange(DE.sec$EXPvsSTA_A1$welch, LFC) %>% na.omit()
+PC1_PC2 <- rbind(PC1.sec, PC2.sec) #%>% mutate(Task=factor(Task, levels=level.order$Task))
+
+clev.plot <- ggplot(PC1_PC2, aes(Loading, Task)) +
+  geom_point(aes(color=PC), size=4, alpha=0.7) +
+  theme(text=element_text(size=19), axis.title.y=element_blank(), legend.position = "bottom") +
+  scale_color_manual(values=c("#E69F00", "#56B4E9")) +
+  ggtitle("PC Loadings")
+
+
+png("Figures/clevland_PC_grid.png", width=610, height=610)
+clev.plot + theme(legend.position = "right") +
+  geom_vline(xintercept = 0, linetype="dotted", color = "red", size=1) +
+  facet_grid(System ~ ., scales="free", 
+                       labeller = labeller(System = label_wrap_gen(width = 13)))                              # Change strip.background color
+  #theme(strip.background = element_rect(fill = c("red", "blue", "yellow", "green", "pink")))
+dev.off()
+```
+ 
+ 
+############################################################################
+Differentially active tasks
+############################################################################
+
+Function
+```{r}
+welch.test <- function(group1, group2, cellfie, taskInfo, p.thresh, LFC.thresh){
+  in.group1 <- select(cellfie, group1) %>% log2()
+  in.group2 <- select(cellfie, group2) %>% log2()
+  welch.df <- matrixTests::row_t_welch(in.group1, in.group2) %>% 
+    data.table() %>%
+    cbind(taskInfo) %>% 
+    mutate(p.adjust := p.adjust(pvalue, method="BH")) %>% 
+    mutate(LFC := mean.x-mean.y) #%>% mutate(LFC := log2(FC))
+  
+  sig.tasks <- select(welch.df, c("mean.x", "mean.y", "mean.diff","LFC", "p.adjust", names(taskInfo))) %>%
+    filter(p.adjust <= p.thresh) %>% filter(LFC <= -log2(LFC.thresh) | LFC >= log2(LFC.thresh))
+  
+  return(list(welch=welch.df, sigRes=sig.tasks))
+}
+```
+
+```{r}
+# select groups for comparison: "A0_EXP" "A0_STA" "A1_EXP" "A1_STA"
+#A1 (high producers)
+#A0 (low producers)
+group.A1_EXP <- pheno$sample.id[pheno$condition_state == "A1_EXP"] 
+group.A1_STA <- pheno$sample.id[pheno$condition_state == "A1_STA"] 
+group.A0_EXP <- pheno$sample.id[pheno$condition_state == "A0_EXP"] 
+group.A0_STA <- pheno$sample.id[pheno$condition_state == "A0_STA"]  
+
+## sec cellfie
+sec.taskInfo <- data.frame(Task=sec.cellfie$Task) %>% left_join(taskInfo)
+identical(sec.cellfie$Task, sec.taskInfo$Task)
+
+DE.sec <- list(
+  # high vs low in EXP
+  A1vsA0_EXP=welch.test(group1=group.A1_EXP, group2=group.A0_EXP, cellfie=sec.cellfie, taskInfo=sec.taskInfo, p.thresh=0.1, LFC.thresh=1),
+  # high vs low in STA
+  A1vsA0_STA=welch.test(group1=group.A1_STA, group2=group.A0_STA, cellfie=sec.cellfie, taskInfo=sec.taskInfo, p.thresh=0.1, LFC.thresh=1),
+  #EXP vs STA high producing cell line
+  STAvsEXP_A1=welch.test(group1=group.A1_STA, group2=group.A1_EXP, cellfie=sec.cellfie, taskInfo=sec.taskInfo, p.thresh=0.1, LFC.thresh=1),
+  #EXP vs STA high producing cell line
+  STAvsEXP_A0=welch.test(group1=group.A0_STA, group2=group.A0_EXP, cellfie=sec.cellfie, taskInfo=sec.taskInfo, p.thresh=0.1, LFC.thresh=1)
+  )
+openxlsx::write.xlsx(list(A1vsA0_EXP=DE.sec$A1vsA0_EXP$sigRes,
+                          A1vsA0_STA=DE.sec$A1vsA0_STA$sigRes,
+                          STAvsEXP_A1=DE.sec$STAvsEXP_A1$sigRes,
+                          STAvsEXP_A0=DE.sec$STAvsEXP_A0$sigRes), "Output/DEsig_sec.xlsx")
+openxlsx::write.xlsx(list(A1vsA0_EXP=DE.sec$A1vsA0_EXP$welch,
+                          A1vsA0_STA=DE.sec$A1vsA0_STA$welch,
+                          STAvsEXP_A1=DE.sec$STAvsEXP_A1$welch,
+                          STAvsEXP_A0=DE.sec$STAvsEXP_A0$welch), "Output/DE_sec.xlsx")
+
+## met cellfiesec.taskInfo <- data.frame(Task=sec.cellfie$Task) %>% left_join(taskInfo)
+met.taskInfo <- data.frame(Task=met.cellfie$Task) %>% left_join(taskInfo)
+identical(met.cellfie$Task, met.taskInfo$Task)
+
+DE.met <- list(
+  # high vs low in EXP
+  A1vsA0_EXP=welch.test(group1=group.A1_EXP, group2=group.A0_EXP, cellfie=met.cellfie, taskInfo=met.taskInfo, p.thresh=0.1, LFC.thresh=1.5),
+  # high vs low in STA
+  A1vsA0_STA=welch.test(group1=group.A1_STA, group2=group.A0_STA, cellfie=met.cellfie, taskInfo=met.taskInfo, p.thresh=0.1, LFC.thresh=1.5),
+  #EXP vs STA high producing cell line
+  STAvsEXP_A1=welch.test(group1=group.A1_STA, group2=group.A1_EXP, cellfie=met.cellfie, taskInfo=met.taskInfo, p.thresh=0.1, LFC.thresh=1.5),
+  #EXP vs STA high producing cell line
+  STAvsEXP_A0=welch.test(group1=group.A0_STA, group2=group.A0_EXP, cellfie=met.cellfie, taskInfo=met.taskInfo, p.thresh=0.1, LFC.thresh=1.5)
+  )
+openxlsx::write.xlsx(list(A1vsA0_EXP=DE.met$A1vsA0_EXP$sigRes,
+                          A1vsA0_STA=DE.met$A1vsA0_STA$sigRes,
+                          STAvsEXP_A1=DE.met$STAvsEXP_A1$sigRes,
+                          STAvsEXP_A0=DE.met$STAvsEXP_A0$sigRes), "Output/DEsig_met.xlsx")
+```
+
+Dotplot of sig tasks
+Secretory
+```{r}
+## EXP vs STA
+STAvsEXP <- mutate(DE.sec$STAvsEXP_A1$sigRes, clone="A1") %>% 
+  rbind(mutate(DE.sec$STAvsEXP_A0$sigRes, clone="A0")) %>%
+  arrange(LFC) 
+level.order <- arrange(STAvsEXP, LFC)
+STAvsEXP <- mutate(STAvsEXP, Task=factor(Task, levels=level.order$Task))
+
+p1 <- ggplot(STAvsEXP, aes(LFC, Task)) +
+  geom_point(aes(color=clone), size=5, alpha=0.7) +
+  theme(text=element_text(size=19), axis.title.y=element_blank()) +
+  ggtitle("STA vs EXP") +
+  geom_vline(xintercept = 0, linetype="dotted", color = "red", size=1)
+
+
+## A1 vs A0
+A1vsA0 <- mutate(DE.sec$A1vsA0_EXP$sigRes, phase="EXP") %>% 
+  rbind(mutate(DE.sec$A1vsA0_STA$sigRes, phase="STA")) %>%
+  arrange(LFC)
+level.order <- arrange(A1vsA0, LFC)
+A1vsA0 <- mutate(A1vsA0, Task=factor(Task, levels=level.order$Task))
+
+p2 <- ggplot(A1vsA0, aes(LFC, Task)) +
+  geom_point(aes(color=phase), size=5, alpha=0.7) +
+  theme(text=element_text(size=19), axis.title.y=element_blank()) +
+  ggtitle("A1 vs A0") + 
+  scale_color_brewer(palette="Accent") +
+  geom_vline(xintercept = 0, linetype="dotted", color = "red", size=1)
+```
+
+Metabolic
+```{r}
+## EXP vs STA
+STAvsEXP <- mutate(DE.met$STAvsEXP_A1$sigRes, clone="A1") %>% 
+  rbind(mutate(DE.met$STAvsEXP_A0$sigRes, clone="A0")) %>%
+  arrange(LFC) 
+level.order <- arrange(STAvsEXP, LFC)
+STAvsEXP <- mutate(STAvsEXP, Task=factor(Task, levels=level.order$Task))
+
+p3 <- ggplot(STAvsEXP, aes(LFC, Task)) +
+  geom_point(aes(color=clone), size=5, alpha=0.7) +
+  theme(text=element_text(size=19), axis.title.y=element_blank()) +
+  ggtitle("STA vs EXP") +
+  geom_vline(xintercept = 0, linetype="dotted", color = "red", size=1)
+
+## A1 vs A0
+A1vsA0 <- mutate(DE.met$A1vsA0_EXP$sigRes, phase="EXP") %>% 
+  rbind(mutate(DE.met$A1vsA0_STA$sigRes, phase="STA")) %>%
+  arrange(LFC)
+level.order <- arrange(A1vsA0, LFC)
+A1vsA0 <- mutate(A1vsA0, Task=factor(Task, levels=level.order$Task))
+
+p4 <- ggplot(A1vsA0, aes(LFC, Task)) +
+  geom_point(aes(color=phase), size=5, alpha=0.7) +
+  theme(text=element_text(size=19), axis.title.y=element_blank()) +
+  ggtitle("A1 vs A0") + 
+  scale_color_brewer(palette="Accent") +
+  geom_vline(xintercept = 0, linetype="dotted", color = "red", size=1)
+
+```
+
+Combine all plots into a single figure
+```{r}
+p1.grob <- p1 + theme(plot.title = element_text(hjust = 0.5))#+ggtitle("")
+p2.grob <- p2 + theme(plot.title = element_text(hjust = 0.5))#+ggtitle("")
+p3.grob <- p3 + theme(plot.title = element_text(hjust = 0.5))#+ggtitle("")
+p4.grob <- p4 + theme(plot.title = element_text(hjust = 0.5))#+ggtitle("")
+
+png("Figures/dotplot_all.png", width=1200, height=700)
+egg::ggarrange(p1.grob, p2.grob, p3.grob, p4.grob, ncol=2)
+dev.off()
+```
+
+```{r}
+STAvsEXP.sec <- mutate(DE.sec$STAvsEXP_A1$sigRes, condition="A1") %>% 
+  rbind(mutate(DE.sec$STAvsEXP_A0$sigRes, condition="A0")) %>%
+  mutate(comparison="STA vs. EXP") %>%
+  arrange(LFC) 
+A1vsA0.sec <- mutate(DE.sec$A1vsA0_EXP$sigRes, condition="EXP") %>% 
+  rbind(mutate(DE.sec$A1vsA0_STA$sigRes, condition="STA")) %>%
+  mutate(comparison="A1 vs. A0") %>%
+  arrange(LFC)
+STAvsEXP.met <- mutate(DE.met$STAvsEXP_A1$sigRes, condition="A1") %>% 
+  rbind(mutate(DE.met$STAvsEXP_A0$sigRes, condition="A0")) %>%
+  mutate(comparison="STA vs. EXP") %>%
+  arrange(LFC)
+A1vsA0.met <- mutate(DE.met$A1vsA0_EXP$sigRes, condition="EXP") %>% 
+  rbind(mutate(DE.met$A1vsA0_STA$sigRes, condition="STA")) %>%
+  mutate(comparison="A1 vs. A0") %>%
+  arrange(LFC)
+
+compare.all <- rbind(A1vsA0.met, A1vsA0.sec, STAvsEXP.met, STAvsEXP.sec) %>%
+  mutate(condition=as.factor(condition))
+levels(compare.all$condition) <- c(levels(compare.all$condition), "A1")
+
+png("Figures/dotplotAll_grid.png", width=1100, height=550)
+ggplot(compare.all, aes(LFC, Task)) +
+  geom_point(aes(color=condition), size=6) +
+  theme(text=element_text(size=21), axis.title.y=element_blank()) +
+  scale_color_manual(values=c("#7FC97F", "#BEAED4", "#FDC086", "#386CB0") %>%
+                       setNames(levels(compare.all$condition)), drop=F, 
+                     breaks=c('A1', 'A0', 'EXP', 'STA')) +
+  #scale_color_brewer(palette="Accent") +
+  geom_vline(xintercept = 0, linetype="dotted", color = "red", size=1) +
+  facet_grid(Pathway ~ comparison, margins=F, scales="free", space="free_y")
+dev.off()
+
+```
+
+
+############################################################################
+DE A1 vs A0
+############################################################################
+
+```{r}
+library(DESeq2)
+```
+
+Load data
+```{r}
+raw.counts <- fread("Input/counts.csv") %>% select(c("gene.id", "gene", colnames(count.matrix)))
+pheno <- openxlsx::read.xlsx("Input/Susan_Annotations.xlsx", sheet="clean")
+
+# It is absolutely critical that the columns of the count matrix and the rows of the column data (information about samples) are in the same order.
+identical(colnames(count.matrix), pheno$sample.id)
+all(pheno$sample.id == colnames(count.matrix))
+```
+
+Construct DESeqDataSet from count matrix
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = count.matrix,
+                              colData = pheno,
+                              design = ~condition)
+```
+
+Pre-filter and set condition level
+```{r}
+keep <- rowSums(counts(dds)) >=10
+dds <- dds[keep,]
+dds$condition <- relevel(dds$condition, ref = "A0")
+```
+
+Differential expression analysis
+```{r}
+set.seed(18)
+dds <- DESeq(dds)
+res <- results(dds) %>% as.data.frame() %>% tibble::rownames_to_column(var="gene")
+res.sig <- filter(res, padj<= 0.01)
+```
+
+Add PSIM info
+```{r}
+CHOmap <- openxlsx::read.xlsx("Input/CHOProtein.xlsx")
+CHOmap2 <- fread("Input/geneInfo_cho_simple.tsv") %>%
+  mutate(GeneID=as.character(GeneID))
+PSIM <- openxlsx::read.xlsx("Input/PSIM_matrix.xlsx")
+
+res.PSIM <- left_join(res, CHOmap, by=c("gene"="ENTREZ_GENE")) %>%
+  left_join(PSIM, by=c("UNIPROTKB"="Entry")) %>% filter(GPI==1) %>% arrange(log2FoldChange) %>% 
+  left_join(CHOmap2, by=c("gene"="GeneID"))
+View(filter(res.PSIM, padj<=0.01) %>% filter(abs(log2FoldChange) >= log2(1.5)))
+
+```
+ 
+Heatmap bar of GPI proteins 
+```{r}
+#my_palette <- colorRampPalette(c(scales::muted("red"), "white", scales::muted("green")))(n = 100)
+my_palette <- colorRampPalette(c(scales::muted("purple"), "white", scales::muted("green")))(n = 100)
+
+png("Figures/GPI_long.png", width=300, height=1200)
+gplots::heatmap.2(cbind(res.PSIM$log2FoldChange, res.PSIM$log2FoldChange), trace="n", Colv=NA, 
+                  labRow = res.PSIM$Symbol, dendrogram = "none", col=my_palette, margins=c(12,15),
+                  labCol="", srtRow=-45, cexRow = 3, key=F, Rowv = F)#, sepcolor = "black", rowsep=c(0:20), colsep=c(0,2))
+dev.off()
+
+png("Figures/GPI_key.png", width=900, height=700)
+gplots::heatmap.2(cbind(res.PSIM$log2FoldChange, res.PSIM$log2FoldChange), trace="n", Colv=NA, 
+                  labRow = res.PSIM$Symbol, dendrogram = "none", col=my_palette,margins=c(6,8),
+                  labCol="", srtRow=-45, cexRow = 1.5, key.title = "LFC", keysize = 4, density.info = "density",
+                  key.par=list(cex=1.5), denscol="black", densadj = 0.8, Rowv = F)
+dev.off()
+```
+

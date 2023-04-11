@@ -1,0 +1,37 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+```
+
+
+Clean up Susan Sharfstein count data based on annotations
+
+```{r}
+pheno <- openxlsx::read.xlsx("Input/Susan_Annotations.xlsx", sheet="clean")
+```
+
+Subset count data to only include samples in manually cleaned up pheno doc
+```{r}
+# load original count data
+count <- data.table::fread("Input/counts.csv")
+
+# subset to only include samples in pheno and entrez ID
+count.clean <- dplyr::select(count, c("gene.id", pheno$sample.id))
+
+# ensure unique geneIDs
+nrow(count.clean) == length(unique(count.clean$gene.id))
+
+# realizing there are some non gene rows (eg. "__alignment_not_unique", "__ambiguous", "__no_feature") that need to be removed
+count.clean <- mutate(count.clean, entrezID=as.numeric(gene.id)) %>%
+  select(entrezID, everything()) %>% na.omit() %>%
+  select(-gene.id)
+
+#save clean count data
+data.table::fwrite(count.clean, "Input/count_clean.csv")
+```
+
+

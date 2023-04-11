@@ -1,5 +1,5 @@
 %% Task Info (task order)
-[taskInfo_num, taskInfo_txt, taskInfo_raw] = xlsread("essentialRxn_notebook2022.xlsx","TaskInfo");
+[taskInfo_num, taskInfo_txt, taskInfo_raw] = xlsread("essentialRxn_final2022.xlsx","TaskInfo");
 tasks = taskInfo_txt(2:end,2);
 %% CHO essentialRxns
 

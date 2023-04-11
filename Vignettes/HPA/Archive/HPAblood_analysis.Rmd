@@ -1,0 +1,398 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE)
+```
+
+```{r}
+library(data.table)
+library(dplyr)
+library(factoextra)
+library(ggplot2)
+library(gplots)
+library(pheatmap)
+library(RColorBrewer)
+```
+
+Load original TPM data (for labels) and pheno data
+```{r}
+#TPM <- fread("~/Desktop/SenateExam/Aim2_CellFie/ImmCellFie_Manuscript/Output/demo_expression.csv")
+TPM <- fread("Output/HPAblood_109_TPMexpression.csv")
+pheno <- fread("Output/HPAblood_109_pheno_withType.csv", colClasses=c("character"))
+
+identical(colnames(TPM)[-1], pheno$Sample_ID)
+pheno <- pheno[match(colnames(TPM)[-1], pheno$Sample_ID) ,]
+identical(colnames(TPM)[-1], pheno$Sample_ID)
+```
+
+Load Cellfie results
+```{r}
+## Secretory Pathway
+#sec.cellfie <- fread("~/Desktop/SenateExam/Aim2_CellFie/ImmCellFie_Manuscript/Output/secretoryCellFie/mean/score.csv") %>%
+sec.cellfie <- fread("CellFie_output/blood/secretoryPathway/mean/109_TPM/score.csv") %>%
+  setNames(colnames(TPM)[-1])
+sec.cellfie.binary <- fread("CellFie_output/blood/secretoryPathway/mean/109_TPM/score_binary.csv") %>%
+  setNames(colnames(TPM)[-1])
+sec.taskInfo <-  openxlsx::read.xlsx("/Users/helenmasson/Desktop/SenateExam/Aim2_CellFie/SecPathway.CellFIE/usingGeM/Generate_essentialRxns_manual/essentialRxn_notebook2022.xlsx", sheet="TaskInfo") %>% mutate(Pathway="Secretory Pathway")
+sec.cellfie.filter <- sec.cellfie*sec.cellfie.binary
+
+## Metabolic Pathway
+#met.cellfie <- fread("~/Desktop/SenateExam/Aim2_CellFie/ImmCellFie_Manuscript/Output/metCellFie/mean/score.csv") %>%
+met.cellfie <- fread("CellFie_output/blood/metabolicPathway/mean/109_TPM/score.csv") %>%
+  setNames(colnames(TPM)[-1])
+met.cellfie.binary <- fread("CellFie_output/blood/metabolicPathway/mean/109_TPM/score_binary.csv") %>%
+  setNames(colnames(TPM)[-1])
+met.taskInfo <- fread("CellFie_output/blood/metabolicPathway/mean/109_TPM/taskInfo.csv") %>%
+  mutate(Pathway="Metabolic Pathway") %>%
+  setNames(colnames(sec.taskInfo))
+met.cellfie.filter <- met.cellfie*met.cellfie.binary
+
+## Combine
+res.cellfie <- rbind(met.cellfie, sec.cellfie)
+res.cellfie.binary <- rbind(met.cellfie.binary, sec.cellfie.binary)
+res.cellfie.filter <- res.cellfie * res.cellfie.binary
+taskInfo <- rbind(met.taskInfo, sec.taskInfo)
+```
+
+####################################################################
+Principal Component Analysis
+####################################################################
+
+PCA using TPM
+```{r}
+### prepare expression data for PCA
+TPM.matrix <- as.matrix(TPM[, -1]) %>% `rownames<-`(TPM$ENTREZID) %>% `colnames<-`(pheno$Sample_ID)
+# remove constant/zero columns
+TPM.matrix <- TPM.matrix[matrixStats::rowSds(TPM.matrix) > 0.001 ,]
+
+# PCA
+res.pca <- prcomp(t(TPM.matrix), scale=T)
+
+# visualize eigenvalues/variances
+fviz_screeplot(res.pca, addlabels=T, ylim = c(0, 100))
+
+# plot individuals on first two components
+fviz_pca_ind(res.pca,
+             geom.ind = c("text", "point"),
+             label="none",
+             pointsize = 3,
+             mean.point = FALSE,
+             show.legend=FALSE,
+             habillage = as.factor(pheno$Immune_Cell),
+             #palette = "Dark2",
+             legend.title = "Donor",
+             repel = TRUE     # Avoid text overlapping
+) + theme(text=element_text(size=4), axis.text = element_text(size = 10), axis.title = element_text(size = 10), legend.text = element_text(size = 10), legend.title = element_text(size = 10), plot.title = element_text(size = 20))
+
+## Variable contributions to the principal axes
+# Contributions of variables to PC1
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 5)
+# Contributions of variables to PC2
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 5)
+```
+
+PCA using CellFie
+```{r}
+### prepare expression data for PCA
+cellfie.matrix <- as.matrix(res.cellfie) %>% `rownames<-`(taskInfo$Task) %>% `colnames<-`(pheno$Sample_ID)
+
+# remove constant/zero columns
+cellfie.matrix <- cellfie.matrix[matrixStats::rowSds(cellfie.matrix) != 0 ,]
+
+# PCA
+res.pca <- prcomp(t(cellfie.matrix), scale=T)
+
+# visualize eigenvalues/variances
+fviz_screeplot(res.pca, addlabels=T, ylim = c(0, 100))
+
+# plot individuals on first two components
+fviz_pca_ind(res.pca,
+             geom.ind = c("text", "point"),
+             label="none",
+             pointsize = 3,
+             mean.point = FALSE,
+             show.legend=FALSE,
+             habillage = as.factor(pheno$Immune_Cell),
+             #palette = "Dark2",
+             legend.title = "Cell Line",
+             repel = TRUE     # Avoid text overlapping
+) + theme(text=element_text(size=4), axis.text = element_text(size = 10), axis.title = element_text(size = 10), legend.text = element_text(size = 10), legend.title = element_text(size = 10), plot.title = element_text(size = 20))
+
+## Variable contributions to the principal axes
+# Contributions of variables to PC1
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 5)
+# Contributions of variables to PC2
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 5)
+```
+
+####################################################################
+Hierarchical Clustering
+####################################################################
+
+It is very difficult to get 18 distinct colors
+Manually attempt to get most distinct colors as possible
+```{r}
+library(randomcoloR)
+palette <- distinctColorPalette(18)
+#pie(rep(1, 18), col=palette)
+
+ann_colors <- list(cell=c(basophil="#E3589A", `classical monocyte`="#DA4FDF", eosinophil="#D86049", `gdT-cell`="#764ADF", `intermediate monocyte`="#7AE94E", `MAIT T-cell`="#D3BEDC", `memory B-cell`="#7FBFDC", `memory CD4 T-cell`="#D291E2", `memory CD8 T-cell`="#7E5C99", `myeloid DC`="#E0989B", `naive B-cell`="#C4E090", `naive CD4 T-cell`="#DEAF66",
+`naive CD8 T-cell`="#D8DF52", neutrophil="#DDE0CC", `NK-cell`="#7DE0D1", `non-classical monocyte`="#809173", `plasmacytoid DC`="#6CDE90", `T-reg`="#6E95DE"))
+```
+
+
+```{r}
+#using all cellfie
+png("Figures/hclust_CellFie.png", width=1200, height=900)
+set.seed(18)
+hclust.cellfie <- pheatmap::pheatmap(cellfie.matrix,
+                    fontsize=20,
+                    main="Hierarchical clustering using CellFie", 
+                    scale="row",
+                    border_color = NA,
+                    #cluster.cols = hclust(dist(cellfie.matrix, method="euclidean"), method="complete"),
+                    clustering_distance_cols = "correlation",
+                    clustering_method = "complete",
+                    annotation_col = data.frame(cell=factor(pheno$Immune_Cell), cellType=pheno$Cell_Type) %>% `rownames<-`(pheno$Sample_ID),
+                    annotation_colors = ann_colors,
+                    show_colnames = F,
+                    show_rownames = F,
+                    treeheight_row = 0,
+                    legend_breaks = c(0,1))
+dev.off()
+```
+```{r}
+#using met cellfie only
+png("Figures/hclust_metCellFie.png", width=1200, height=900)
+set.seed(18)
+hclust.metCellfie <- pheatmap::pheatmap(cellfie.matrix[rownames(cellfie.matrix) %in% met.taskInfo$Task ,],
+                  fontsize=20,
+                  main="Hierarchical clustering using metabolic CellFie only", 
+                  scale="row",
+                  border_color = NA,
+                  #cluster.cols = hclust(dist(cellfie.matrix, method="euclidean"), method="complete"),
+                  clustering_distance_cols = "correlation",
+                  clustering_method = "complete",
+                  annotation_col = data.frame(cell=pheno$Immune_Cell, cellType=pheno$Cell_Type) %>% `rownames<-`(pheno$Sample_ID),
+                  annotation_colors = ann_colors,
+                  show_colnames = F,
+                  show_rownames = F,
+                  treeheight_row = 0,
+                  legend_breaks = c(0,1))
+dev.off()
+```
+```{r}
+#using TPM
+png("Figures/hclust_TPM.png", width=1200, height=900)
+set.seed(18)
+hclust.TPM <- pheatmap::pheatmap(TPM.matrix, 
+                    fontsize=20,
+                    main="Hierarchical clustering using TPM", 
+                    scale="row",
+                    border_color = NA,
+                    clustering_distance_cols = "correlation",
+                    clustering_method = "complete",
+                    annotation_col = data.frame(cell=pheno$Immune_Cell, cellType=pheno$Cell_Type) %>% `rownames<-`(pheno$Sample_ID),
+                    annotation_colors = ann_colors,
+                    show_colnames = F,
+                    show_rownames = F,
+                    treeheight_row = 0,
+                    legend_breaks = c(0,1))
+
+dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+subset of cells
+```{r}
+# using sec and met tasks
+#png("Figures/Figure_5a.png", width=800, height=1500)
+set.seed(18)
+hclust.cellfie <- pheatmap::pheatmap(sam, 
+                   main="Hierarchical clustering using CellFie", 
+                   color = hcl.colors(100, "BluYl"),
+                   scale="row", # "none" or "row"
+                   border_color = NA,
+                   #cluster.cols = hclust(dist(cellfie.matrix, method="euclidean"), method="complete"),
+                   clustering_distance_cols = "correlation",
+                   clustering_method = "complete",
+                   annotation_col = data.frame(cell=bob$`Immune cell`, cellType=bob$Cell_Type) %>%
+                     `rownames<-`(bob$unique_Imm),
+                   #annotation_row = tibble::column_to_rownames(taskInfo, var="Task") %>% select(Pathway),
+                   show_colnames = F,
+                   show_rownames = F,
+                   treeheight_row = 0,
+                   legend_breaks = c(0,1))
+#dev.off()
+
+#using met tasks
+#png("Figures/Figure_5a.png", width=800, height=1500)
+set.seed(18)
+hclust.cellfie <- pheatmap::pheatmap(sam[rownames(sam) %in% met.taskInfo$Task ,], 
+                   main="Hierarchical clustering using metabolic CellFie", 
+                   color = hcl.colors(100, "BluYl"),
+                   scale="row", # "none" or "row"
+                   border_color = NA,
+                   #cluster.cols = hclust(dist(cellfie.matrix, method="euclidean"), method="complete"),
+                   clustering_distance_cols = "correlation",
+                   clustering_method = "complete",
+                   annotation_col = data.frame(cell=bob$`Immune cell`, cellType=bob$Cell_Type) %>%
+                     `rownames<-`(bob$unique_Imm),
+                   #annotation_row = tibble::column_to_rownames(taskInfo, var="Task") %>% select(Pathway),
+                   show_colnames = F,
+                   show_rownames = F,
+                   treeheight_row = 0,
+                   legend_breaks = c(0,1))
+#dev.off()
+
+#using sec tasks
+#png("Figures/Figure_5a.png", width=800, height=1500)
+set.seed(18)
+hclust.cellfie <- pheatmap::pheatmap(sam[rownames(sam) %in% sec.taskInfo$Task ,], 
+                   main="Hierarchical clustering using secretory CellFie", 
+                   color = hcl.colors(100, "BluYl"),
+                   scale="row", # "none" or "row"
+                   border_color = NA,
+                   #cluster.cols = hclust(dist(cellfie.matrix, method="euclidean"), method="complete"),
+                   clustering_distance_cols = "correlation",
+                   clustering_method = "complete",
+                   annotation_col = data.frame(cell=bob$`Immune cell`, cellType=bob$Cell_Type) %>%
+                     `rownames<-`(bob$unique_Imm),
+                   #annotation_row = tibble::column_to_rownames(taskInfo, var="Task") %>% select(Pathway),
+                   show_colnames = F,
+                   show_rownames = F,
+                   treeheight_row = 0,
+                   legend_breaks = c(0,1))
+#dev.off()
+```
+
+
+
+
+
+####################################################################
+Kmeans Clustering
+####################################################################
+
+Kmeans on "Immune Cell"
+```{r}
+set.seed(182)
+kmeans.cellfie <- kmeans(scale(t(cellfie.matrix)), length(unique(pheno$Immune_Cell)), nstart = 25)
+set.seed(17)
+kmeans.TPM <- kmeans(scale(t(TPM.matrix)), length(unique(pheno$Immune_Cell)), nstart = 25)
+```
+
+Kmeans on Immune cell type
+```{r}
+set.seed(182)
+kmeans.cellfie.type <- kmeans(scale(t(cellfie.matrix)), length(unique(pheno$Cell_Type)), nstart = 25)
+
+set.seed(17)
+kmeans.TPM.type <- kmeans(scale(t(TPM.matrix)), length(unique(pheno$Cell_Type)), nstart = 25)
+```
+
+combine all clustering methods into a single dataframe
+```{r}
+cluster.TPM <- as.data.frame(kmeans.TPM$cluster) %>% 
+  tibble::rownames_to_column(var="Sample_ID") %>%
+  dplyr::rename("TPM.cluster"="kmeans.TPM$cluster") %>%
+  mutate(TPM.cluster=as.factor(TPM.cluster))
+
+cluster.TPM.type <- as.data.frame(kmeans.TPM.type$cluster) %>% 
+  tibble::rownames_to_column(var="Sample_ID") %>%
+  dplyr::rename("TPM.type"="kmeans.TPM.type$cluster") %>%
+  mutate(TPM.type=as.factor(TPM.type))
+  
+cluster.cellfie <- as.data.frame(kmeans.cellfie$cluster) %>% 
+  tibble::rownames_to_column(var="Sample_ID") %>%
+  dplyr::rename("cellfie.cluster"="kmeans.cellfie$cluster") %>%
+  mutate(cellfie.cluster=as.factor(cellfie.cluster))
+
+cluster.cellfie.type <- as.data.frame(kmeans.cellfie.type$cluster) %>% 
+  tibble::rownames_to_column(var="Sample_ID") %>%
+  dplyr::rename("cellfie.type"="kmeans.cellfie.type$cluster") %>%
+  mutate(cellfie.type=as.factor(cellfie.type))
+
+pheno.clusters <- left_join(pheno, cluster.TPM) %>% left_join(cluster.cellfie) %>%
+  left_join(cluster.TPM.type) %>% left_join(cluster.cellfie.type) %>%
+  arrange(Cell_Type) 
+```
+
+bar plot cluster by immune cell
+```{r}
+# TPM
+ggplot(data = pheno.clusters, aes(y = TPM.cluster)) +
+  geom_bar(aes(fill = Immune_Cell)) +
+  ggtitle("Clusters by Immune Cell Type using TPM") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(text=element_text(size=15))
+
+# cellfie
+ggplot(data = pheno.clusters, aes(y = cellfie.cluster)) +
+  geom_bar(aes(fill = Immune_Cell)) +
+  ggtitle("Clusters by Immune Cell Type using CellFie") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(text=element_text(size=15))
+```
+ 
+ bar plot immune cell by cluster
+```{r}
+# TPM
+ggplot(data = pheno.clusters, aes(y =Immune_Cell)) +
+  geom_bar(aes(fill = TPM.cluster)) +
+  ggtitle("Clusters by Immune Cell Type using TPM") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(text=element_text(size=15))
+
+# cellfie
+ggplot(data = pheno.clusters, aes(y =Immune_Cell)) +
+  geom_bar(aes(fill = cellfie.cluster)) +
+  ggtitle("Clusters by Immune Cell Type using CellFie") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(text=element_text(size=15))
+```
+
+Clustering on subset of cells
+```{r}
+bob <- filter(pheno, Cell_Type == "Granulocytes" | Cell_Type == "Dentritic Cells" | Cell_Type == "NK-cells")
+sam <- cellfie.matrix[, match(bob$unique_Imm, colnames(cellfie.matrix))]
+identical(bob$unique_Imm, colnames(sam))
+
+#remove rows/tasks with no variation
+sam <- sam[matrixStats::rowSds(sam) > 0.000000001 ,]
+
+set.seed(182)
+kmeans.subset <- kmeans(scale(t(sam)), length(unique(bob$`Immune cell`)), nstart = 25)
+
+cluster.subset <- as.data.frame(kmeans.subset$cluster) %>% 
+  tibble::rownames_to_column(var="unique_Imm") %>%
+  dplyr::rename("cluster"="kmeans.subset$cluster") %>%
+  mutate(cluster=as.factor(cluster)) %>% right_join(bob)
+
+ggplot(data = cluster.subset, aes(y = cluster)) +
+  geom_bar(aes(fill = `Immune cell`)) +
+  ggtitle("Clusters by Immune Cell Type using CellFie") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(text=element_text(size=15))
+```
+
+
+
+

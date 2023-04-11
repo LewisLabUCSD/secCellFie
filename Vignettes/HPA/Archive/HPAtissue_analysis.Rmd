@@ -1,0 +1,92 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+remove any loaded packages from a previous analysis
+```{r}
+lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE)
+```
+
+load libraries
+```{r}
+library(data.table)
+library(dplyr)
+library(factoextra)
+library(ggplot2)
+library(gplots)
+library(pheatmap)
+```
+
+Load original TPM and pheno data
+```{r}
+TPM <- fread("Output/HPAtissue_expression.csv")
+pheno <- fread("Output/HPAtissue_pheno.csv")
+
+# match pheno order with TPM order
+identical(colnames(TPM)[-1], pheno$Tissue)
+idx <- match(colnames(TPM)[-1], pheno$Tissue)
+identical(colnames(TPM)[-1], pheno$Tissue[idx])
+pheno <- pheno[idx,]
+identical(colnames(TPM)[-1], pheno$Tissue)
+```
+
+Load Cellfie results
+```{r}
+## Secretory Pathway
+sec.cellfie <- fread("CellFie_output/secretoryPathway/minmaxmean/score.csv") %>%
+  setNames(colnames(TPM)[-1])
+sec.cellfie.binary <- fread("CellFie_output/secretoryPathway/minmaxmean/score_binary.csv") %>%
+  setNames(colnames(TPM)[-1])
+sec.taskInfo <-  openxlsx::read.xlsx("/Users/helenmasson/Desktop/SenateExam/Aim2_CellFie/SecPathway.CellFIE/usingGeM/Generate_essentialRxns_manual/essentialRxn_notebook2022.xlsx", sheet ="TaskInfo")
+sec.cellfie.filter <- sec.cellfie*sec.cellfie.binary
+
+## Metabolic Pathway
+met.cellfie <- fread("CellFie_output/metabolicPathway/minmaxmean/score.csv") %>%
+  setNames(colnames(TPM)[-1])
+met.cellfie.binary <- fread("CellFie_output/metabolicPathway/minmaxmean/score_binary.csv") %>%
+  setNames(colnames(TPM)[-1])
+met.taskInfo <- fread("CellFie_output/metabolicPathway/minmaxmean/taskInfo.csv") %>%
+  setNames(colnames(sec.taskInfo))
+met.cellfie.filter <- met.cellfie*met.cellfie.binary
+
+## Combine
+res.cellfie <- rbind(met.cellfie, sec.cellfie)
+res.cellfie.binary <- rbind(met.cellfie.binary, sec.cellfie.binary)
+res.cellfie.filter <- res.cellfie * res.cellfie.binary
+taskInfo <- rbind(met.taskInfo, sec.taskInfo)
+```
+
+PCA using CellFie
+```{r}
+### prepare expression data for PCA
+cellfie.matrix <- as.matrix(res.cellfie) %>% `rownames<-`(taskInfo$Task)
+#cellfie.matrix <- as.matrix(res.cellfie.filter) %>% `rownames<-`(taskInfo$Task) %>% `colnames<-`(pheno$unique_Imm)
+
+# remove constant/zero columns
+cellfie.matrix <- cellfie.matrix[matrixStats::rowSds(cellfie.matrix) != 0 ,]
+
+# PCA
+res.pca <- prcomp(t(cellfie.matrix), scale=T)
+
+# visualize eigenvalues/variances
+fviz_screeplot(res.pca, addlabels=T, ylim = c(0, 100))
+
+# plot individuals on first two components
+fviz_pca_ind(res.pca,
+             geom.ind = c("text", "point"),
+             pointsize = 3,
+             mean.point = FALSE,
+             show.legend=FALSE,
+             habillage = as.factor(pheno$Organ),
+             #palette = "Dark2",
+             legend.title = "Cell Line",
+             repel = TRUE     # Avoid text overlapping
+) + theme(text=element_text(size=4), axis.text = element_text(size = 10), axis.title = element_text(size = 10), legend.text = element_text(size = 10), legend.title = element_text(size = 10), plot.title = element_text(size = 20))
+
+## Variable contributions to the principal axes
+# Contributions of variables to PC1
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 5)
+# Contributions of variables to PC2
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 5)
+```
+

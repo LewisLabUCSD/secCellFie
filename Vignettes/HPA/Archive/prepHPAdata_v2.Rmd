@@ -1,0 +1,133 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE)
+```
+
+Load the required library packages
+```{r}
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+```
+
+######################
+TISSUE
+######################
+
+Load HPA tissue data
+You can download the data from: https://www.proteinatlas.org/about/download
+```{r}
+tissue.data <- fread(paste('unzip -p', "Input/rna_tissue_hpa.tsv.zip"))
+tissue.pheno <- fread(paste('unzip -p', "Input/rna_tissue_hpa_description.tsv.zip"))
+```
+
+Generate expression matrix compatible with CellFie
+```{r}
+# Isolate expression data and reshape the data from long format to wide format (rows=samples, columns=genes)
+TPM.matrix <- tissue.data[, c("Gene", "Tissue", "nTPM")] %>%
+  spread(Tissue, nTPM)
+
+# Convert ensemble gene IDs to entrez IDs
+gene.map <- AnnotationDbi::select(org.Hs.eg.db, keys=TPM.matrix$Gene, columns=c("ENTREZID"), keytype="ENSEMBL") %>% na.omit()
+TPM.matrix.entrez <- left_join(TPM.matrix, gene.map, by=c("Gene"="ENSEMBL")) %>%
+  dplyr::select(ENTREZID, everything()) %>% dplyr::select(-Gene) %>% na.omit()
+  
+# Aggregate duplicate genes by max value
+TPM.entrez.max <- aggregate(TPM.matrix.entrez[,-1], by=list(TPM.matrix.entrez$ENTREZID), FUN=max) %>%
+  dplyr::rename(entrezID = Group.1) %>% sapply(as.numeric) %>% as.data.frame()
+
+# Add pseudo count
+TPM.entrez.pseudo <- cbind(ENTREZID=TPM.entrez.max$entrezID, TPM.entrez.max[, 2:ncol(TPM.entrez.max)] + 0.00001)
+```
+
+Generate properties data matrix (phenotypic information for the samples)
+```{r}
+setdiff(names(TPM.entrez.pseudo), tissue.pheno$Tissue)
+
+# remove " 1" from pheno Tissue names
+tissue.pheno[tissue.pheno=="stomach 1"] <- "stomach"
+tissue.pheno[tissue.pheno=="endometrium 1"] <- "endometrium"
+tissue.pheno[tissue.pheno=="skin 1"] <- "skin"
+
+setdiff(names(TPM.entrez.pseudo), tissue.pheno$Tissue)
+setdiff(tissue.pheno$Tissue, names(TPM.entrez.pseudo))
+
+# remove pheno data for samples not present in TPM matrix
+tissue.pheno <- tissue.pheno[tissue.pheno$Tissue %in% names(TPM.entrez.pseudo)]
+setdiff(tissue.pheno$Tissue, names(TPM.entrez.pseudo))
+```
+
+Save/Export files
+```{r}
+fwrite(TPM.entrez.pseudo, "Output/HPAtissue_expression.csv") #Archive: TPM.entrez.max
+fwrite(tissue.pheno, "Output/HPAtissue_pheno.csv")
+```
+
+
+######################
+BLOOD
+######################
+
+Load HPA immune cell data
+```{r}
+blood.data <- fread(paste('unzip -p', "Input/rna_immune_cell.tsv.zip"))
+```
+
+Generate expression matrix compatible with CellFie
+```{r}
+expression.type <- c("TPM", "pTPM", "nTPM")
+
+for(exp in expression.type) {
+ 
+  # Isolate expression data and reshape the data from long format to wide format (rows=samples, columns=genes)
+  TPM.matrix <- dplyr::select(blood.data, c("Gene", "Immune cell", exp)) %>%
+    tidyr::spread_("Immune cell", exp)
+  
+  # Convert ensemble gene IDs to entrez IDs
+  gene.map <- AnnotationDbi::select(org.Hs.eg.db, keys=TPM.matrix$Gene, columns=c("ENTREZID"), keytype="ENSEMBL") %>%
+    na.omit()
+  TPM.matrix.entrez <- left_join(TPM.matrix, gene.map, by=c("Gene"="ENSEMBL")) %>%
+    dplyr::select(ENTREZID, everything()) %>% dplyr::select(-Gene) %>% na.omit()
+  
+  # Aggregate duplicate genes by max value
+  TPM.entrez.max <- aggregate(TPM.matrix.entrez[,-1], by=list(TPM.matrix.entrez$ENTREZID), FUN=max) %>%
+  dplyr::rename(entrezID = Group.1) %>% sapply(as.numeric) %>% as.data.frame() %>%
+    # Remove total PBMC
+    dplyr::select(-c("total PBMC"))
+  
+  # Add pseudo count
+  #TPM.entrez.pseudo <- cbind(ENTREZID=TPM.entrez.max$entrezID, TPM.entrez.max[, 2:ncol(TPM.entrez.max)] + 0.00001)
+  
+  # Export file
+  fwrite(TPM.entrez.max, paste0("Output/HPAblood_", exp, "expression.csv"))
+}
+```
+
+Generate properties data matrix (phenotypic information for the samples)
+```{r}
+setdiff(names(TPM.entrez.pseudo), tissue.pheno$Tissue)
+
+# remove " 1" from pheno Tissue names
+tissue.pheno[tissue.pheno=="stomach 1"] <- "stomach"
+tissue.pheno[tissue.pheno=="endometrium 1"] <- "endometrium"
+tissue.pheno[tissue.pheno=="skin 1"] <- "skin"
+
+setdiff(names(TPM.entrez.pseudo), tissue.pheno$Tissue)
+setdiff(tissue.pheno$Tissue, names(TPM.entrez.pseudo))
+
+# remove pheno data for samples not present in TPM matrix
+tissue.pheno <- tissue.pheno[tissue.pheno$Tissue %in% names(TPM.entrez.pseudo)]
+setdiff(tissue.pheno$Tissue, names(TPM.entrez.pseudo))
+```
+
+Save/Export files
+```{r}
+fwrite(TPM.entrez.pseudo, "Output/HPAtissue_expression.csv") #Archive: TPM.entrez.max
+fwrite(tissue.pheno, "Output/HPAtissue_pheno.csv")
+```

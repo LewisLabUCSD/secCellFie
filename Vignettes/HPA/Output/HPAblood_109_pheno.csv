@@ -1,0 +1,104 @@
+Sample ID,Donor,Immune cell
+sample_940,a,eosinophil
+sample_941,a,classical monocyte
+sample_942,a,intermediate monocyte
+sample_943,a,non-classical monocyte
+sample_944,a,MAIT T-cell
+sample_945,a,gdT-cell
+sample_947,a,plasmacytoid DC
+sample_948,a,myeloid DC
+sample_949,a,naive B-cell
+sample_950,a,memory CD8 T-cell
+sample_951,a,NK-cell
+sample_952,a,memory CD4 T-cell
+sample_953,a,naive CD4 T-cell
+sample_954,a,naive CD8 T-cell
+sample_955,a,memory B-cell
+sample_956,a,T-reg
+sample_957,a,neutrophil
+sample_958,b,classical monocyte
+sample_959,b,eosinophil
+sample_960,b,gdT-cell
+sample_961,b,intermediate monocyte
+sample_962,b,MAIT T-cell
+sample_963,b,memory B-cell
+sample_964,b,memory CD4 T-cell
+sample_965,b,memory CD8 T-cell
+sample_966,b,myeloid DC
+sample_967,b,naive B-cell
+sample_968,b,naive CD4 T-cell
+sample_969,b,naive CD8 T-cell
+sample_970,b,neutrophil
+sample_971,b,NK-cell
+sample_973,b,plasmacytoid DC
+sample_975,b,T-reg
+sample_976,c,basophil
+sample_977,c,classical monocyte
+sample_978,c,eosinophil
+sample_979,c,gdT-cell
+sample_980,c,intermediate monocyte
+sample_981,c,MAIT T-cell
+sample_982,c,memory B-cell
+sample_983,c,memory CD4 T-cell
+sample_984,c,memory CD8 T-cell
+sample_985,c,myeloid DC
+sample_986,c,naive B-cell
+sample_987,c,naive CD4 T-cell
+sample_988,c,naive CD8 T-cell
+sample_989,c,neutrophil
+sample_990,c,NK-cell
+sample_991,c,non-classical monocyte
+sample_992,c,plasmacytoid DC
+sample_994,c,T-reg
+sample_995,d,basophil
+sample_996,d,classical monocyte
+sample_997,d,eosinophil
+sample_998,d,gdT-cell
+sample_999,d,intermediate monocyte
+sample_1000,d,MAIT T-cell
+sample_1001,d,memory B-cell
+sample_1002,d,memory CD4 T-cell
+sample_1003,d,memory CD8 T-cell
+sample_1004,d,myeloid DC
+sample_1005,d,naive B-cell
+sample_1006,d,naive CD4 T-cell
+sample_1007,d,naive CD8 T-cell
+sample_1008,d,neutrophil
+sample_1009,d,NK-cell
+sample_1010,d,non-classical monocyte
+sample_1011,d,plasmacytoid DC
+sample_1013,d,T-reg
+sample_1015,e,gdT-cell
+sample_1016,e,eosinophil
+sample_1017,e,neutrophil
+sample_1018,e,classical monocyte
+sample_1019,e,intermediate monocyte
+sample_1020,e,non-classical monocyte
+sample_1021,e,MAIT T-cell
+sample_1022,e,basophil
+sample_1023,e,naive CD4 T-cell
+sample_1024,e,memory CD4 T-cell
+sample_1025,e,naive CD8 T-cell
+sample_1027,e,plasmacytoid DC
+sample_1028,e,myeloid DC
+sample_1029,e,naive B-cell
+sample_1030,e,memory B-cell
+sample_1031,e,NK-cell
+sample_1032,e,T-reg
+sample_1034,f,neutrophil
+sample_1035,f,MAIT T-cell
+sample_1036,f,gdT-cell
+sample_1037,f,plasmacytoid DC
+sample_1039,f,eosinophil
+sample_1040,f,basophil
+sample_1041,f,NK-cell
+sample_1042,f,naive B-cell
+sample_1043,f,memory B-cell
+sample_1044,f,T-reg
+sample_1045,f,classical monocyte
+sample_1046,f,intermediate monocyte
+sample_1047,f,non-classical monocyte
+sample_1048,f,naive CD8 T-cell
+sample_1049,f,memory CD8 T-cell
+sample_1050,f,naive CD4 T-cell
+sample_1051,f,memory CD4 T-cell

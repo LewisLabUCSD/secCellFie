@@ -11,101 +11,84 @@ library(RColorBrewer)
 library(ggraph)
 library(igraph)
 library(tidyverse)
+library(treemapify)
 ```
 
 
-
+Load taskInfo
 ```{r}
-taskInfo <- openxlsx::read.xlsx("Generate_essentialRxns_manual/essentialRxn_notebook2022.xlsx", sheet="TaskInfo")
-count.system <- table(taskInfo$System) %>% data.table() %>% setNames(c("System", "count"))
+#secCellFie
+taskInfo.sec <- openxlsx::read.xlsx("Generate_essentialRxns_manual/essentialRxn_notebook2022.xlsx", sheet="TaskInfo")
+count.system.sec <- table(taskInfo.sec$System) %>% data.table() %>% setNames(c("System", "count")) %>%
+  mutate(System=toupper(System)) %>%
+  mutate(Pathway="Secretory Pathway")
+
+#metCellFie
+# fread("CellFie/genepattern/outtmp/taskInfo.csv")
+taskInfo.met <- fread("taskInfo_edit.csv") %>% setNames(colnames(taskInfo.sec))
+count.system.met <- table(taskInfo.met$System) %>% data.table() %>% setNames(c("System", "count")) %>%
+  mutate(Pathway="Metabolic Pathway")
 ```
 
-
+Pie chart of secretory tasks by System
 ```{r}
 # Compute the position of labels
-count.system <- count.system %>% 
-  arrange(desc(System)) %>%
-  mutate(prop=count/sum(count.system$count)*100) %>%
-  mutate(ypos=cumsum(prop)- 0.5*prop) %>%
-  mutate(percent=scales::percent(count/21))
+#count.system.sec <- count.system.sec %>% 
+  #arrange(desc(System)) %>%
+  #mutate(prop=count/sum(count.system$count)*100) %>%
+  #mutate(ypos=cumsum(prop)- 0.5*prop) %>%
+  #mutate(percent=scales::percent(count/21))
 
-ggplot(count.system, aes(x="", y=count, fill=System)) +
+ggplot(count.system.sec, aes(x="", y=count, fill=System)) +
   geom_bar(stat="identity", width=1) +
   #geom_text(aes(y=ypos, label= percent, size=4)) +
   coord_polar("y", start=0) +
   theme_void() +
-  scale_fill_brewer(palette="Set1")
-  
+  scale_fill_brewer(palette="Set2")
+
+ggsave("Figures/secCellfie_pieChart.svg", pie.system, width = 8, height = 6)
+```
+
+Treemap of ALL (met and sec) secretory subsystems
+```{r}
+count.system <- rbind(count.system.met, count.system.sec)
+
+cellfie.tree <- ggplot(count.system, aes(area=count, subgroup=Pathway, subgroup2= System, fill=Pathway))+ 
+  labs(fill = "Cellfie Pathway")+
+  scale_fill_manual(values=c("plum1", "palegreen"))+
+  geom_treemap(colour="white")+
+  geom_treemap_subgroup2_border(colour="gray61", size=1) +
+  geom_treemap_subgroup_border(colour="gray61", size=4) +
+  #geom_treemap_subgroup_text(place="centre", grow=F, alpha=0.7, colour="gray99", min.size=0, reflow=T) +
+  geom_treemap_subgroup2_text(place="centre", grow=F, alpha=0.7, colour="black", min.size=0, reflow=T) +
+  theme(legend.title=element_text(size=15), legend.text = element_text(size=13))
+
+ggsave("Figures/CellFie_tree.svg", cellfie.tree, width = 9, height = 6)
+
 ```
 
 
-CellFie hierarchy
+Treemap v2 (include subgroup info)
 ```{r}
-# add root node: Secretory Pathway
-taskInfo$Pathway <- rep("Secretory Pathway", nrow(taskInfo))
+count.system.met2 <- table(taskInfo.met$Subsystem) %>% data.table() %>% setNames(c("Subsystem", "count")) %>%
+  left_join(select(taskInfo.met, c("System", "Subsystem")) %>% unique()) %>%
+  mutate(Pathway="Metabolic Pathway")
+count.system.sec2 <- table(taskInfo.sec$Subsystem) %>% data.table() %>% setNames(c("Subsystem", "count")) %>%
+  left_join(select(taskInfo.sec, c("System", "Subsystem")) %>% unique()) %>%
+  mutate(Pathway="Secretory Pathway")
 
-# edge list
-edges_level1_2 <- taskInfo %>% select(
-  Pathway, System) %>% unique %>% rename(
-  from=Pathway, to=System)
-
-edges_level12_3 <- taskInfo %>% select(
-  System, Subsystem) %>% unique %>% rename(
-  from=System, to=Subsystem)
- 
-edges_level3_4 <- taskInfo %>% select(
-  Subsystem, Task) %>% unique %>% rename(
-  from=Subsystem, to=Task)
-
-# generate graph
-edge_list=rbind(edges_level1_2, edges_level12_3, edges_level3_4)
-mygraph <- graph_from_data_frame( edge_list )
-```
-
-Explore different sytles
-```{r}
-# With igraph:
-plot(mygraph, vertex.label=V(mygraph)$name, edge.arrow.size=0, vertex.size=2)
-
-# With ggraph:
-ggraph(mygraph, layout = 'dendrogram') +
-  geom_edge_diagonal() +
-  geom_node_text(aes( label=name)) +
-  theme_void()
-
-ggraph(mygraph, layout = 'dendrogram', circular = TRUE) + 
-  geom_edge_diagonal() + 
-  geom_node_text(aes(label = name))
-
-ggraph(mygraph, layout='dendrogram') + 
-  geom_edge_diagonal() + 
-  geom_node_text(aes(label = name, filter=leaf, angle=90)) +
-  expand_limits(x = c(-1.3, 1.3), y = c(-1.3, 1.3))
-
-ggraph(mygraph, layout='dendrogram') + 
-  geom_edge_elbow2() + 
-  geom_node_text(aes(label = name))
-
-ggraph(mygraph, 'circlepack') + 
-  geom_node_circle(aes(fill = depth), size = 0.25, n = 50) + 
-  coord_fixed() +geom_node_text(aes(label = name))
-
-set.seed(1)
-ggraph(mygraph, 'circlepack') + 
-  geom_edge_link() + 
-  geom_node_point(aes(colour = depth)) +
-  coord_fixed()
-
-ggraph(mygraph, 'treemap') + 
-  geom_node_tile(aes(fill = depth), size = 0.25) + 
-  geom_node_text(aes(label = name)) + 
-  scale_fill_viridis()
-
-ggraph(mygraph, 'partition', circular=TRUE) + 
-  geom_node_arc_bar(aes(fill=depth), size=0.25) + 
-  geom_node_text(aes(label = name), size=2.7) + 
-  scale_fill_viridis()
+count.system2 <- rbind(count.system.met2, count.system.sec2)
 
 
+cellfie.tree2 <- ggplot(count.system2, aes(area=count, subgroup=System, subgroup2= Subsystem, fill=Pathway))+ 
+  labs(fill = "Cellfie Pathway")+
+  scale_fill_manual(values=c("#8B008B", "#008B45"))+
+  geom_treemap(colour="white")+
+  geom_treemap_subgroup2_border(colour="gray61", size=1) +
+  geom_treemap_subgroup_border(colour="gray61", size=4) +
+  geom_treemap_subgroup_text(place="centre", grow=F, alpha=1, colour="gray99", min.size=0, reflow=T) + #gray99
+  geom_treemap_subgroup2_text(place="top", grow=F, alpha=0.8, colour="gray27", min.size=0, reflow=T) + #gray27
+  theme(legend.title=element_text(size=15), legend.text = element_text(size=13))
+ggsave("Figures/CellFie_tree_v2.png", cellfie.tree2, width = 9, height = 6)
 ```
 

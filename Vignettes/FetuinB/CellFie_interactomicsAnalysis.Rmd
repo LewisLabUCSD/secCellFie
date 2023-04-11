@@ -1,0 +1,174 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Remove any/all packages from previous work
+```{r}
+lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE)
+```
+
+Load packages
+```{r}
+library(org.Hs.eg.db)
+library(dplyr)
+library(data.table)
+library(ggplot2)
+```
+
+###################################################### 
+CELLFIE ANALYSIS
+######################################################
+
+Load Cellfie results
+```{r}
+interactome_raw <- fread("Output/FetuinB_interactomics.csv")
+geneScore <- fread("CellFie_output/interactome/local_minmaxmean/GeneScore_sec.csv")
+res.cellfie <- fread("CellFie_output/interactome/local_minmaxmean/score.csv") %>% setNames(c("NAFLD_R1", "NAFLD_R2", "NAFLD_R3", "WT_R1", "WT_R2", "WT_R3"))
+res.cellfie.binary <- fread("CellFie_output/interactome/local_minmaxmean/score_binary.csv")
+taskInfo <-  fread("CellFie_output/interactome/local_minmaxmean/taskInfo.csv") %>%
+  mutate(Pathway = case_when(stringr::str_detect(taskInfos1, "sec_") ~ 'Secretory',
+         !stringr::str_detect(taskInfos1, "sec_") ~ 'Metabolism')) %>%
+  setNames(c("taskID", "Task", "System", "Subsystem", "Pathway"))
+detail.scoring <- fread("CellFie_output/interactome/local_minmaxmean/detailScoring.csv")
+
+# Met only
+res.cellfie.met <- cbind(taskInfo, res.cellfie) %>%
+  filter(Pathway=="Metabolic")
+taskInfo.met <- filter(taskInfo, Pathway=="Metabolic")
+
+# Sec only
+res.cellfie.sec <- cbind(taskInfo, res.cellfie) %>%
+  filter(Pathway=="Secretory")
+taskInfo.sec <- filter(taskInfo, Pathway=="Secretory")
+```
+
+Differential active task interactions
+```{r}
+welch.test <- matrixTests::row_t_welch(res.cellfie[, c("NAFLD_R1", "NAFLD_R2", "NAFLD_R3")], res.cellfie[, c("WT_R1", "WT_R2", "WT_R3")]) %>% data.table() %>% cbind(taskInfo) %>% mutate(p.adjust := p.adjust(pvalue, method="BH")) %>% mutate(FC := mean.x/mean.y) %>% mutate(LFC := log2(FC))
+
+sig.tasks <- welch.test[, c("mean.x", "mean.y", "mean.diff", "FC" ,"LFC", "p.adjust", "Task", "System", "Subsystem", "Pathway")] %>% filter(p.adjust <= 0.1) %>% filter(LFC <= -log2(1.25) | LFC >= log2(1.25))
+```
+
+Volcano plot
+```{r}
+selectLab <- sig.tasks$Task
+EnhancedVolcano::EnhancedVolcano(welch.test, 
+                                 lab=welch.test$Task,
+                                 x= "LFC", 
+                                 y="p.adjust", 
+                                 pCutoff=0.1, 
+                                 FCcutoff = log2(1.25),
+                                 labSize = 4,
+                                 #labCol="black",
+                                 #labFace="bold",
+                                 title = "Secretory Pathway CellFie Volano Plot",
+                                 subtitle = 'NAFLD vs. WT',
+                                 ylim=c(0,5),
+                                 xlim = c(-1, 1),
+                                 pointSize = c(ifelse(welch.test$p.adjust<=0.1 & abs(welch.test$LFC) >= log2(1.25), 3, 1.7)),
+                                 caption = bquote("fold change cutoff: 1.25; FDR cutoff: 0.1"),
+                                 legendPosition = "right",
+                                 legendLabSize = 14,
+                                 colAlpha = 0.9,
+                                 #colGradient = c('red3', 'royalblue'),
+                                 drawConnectors = T,
+                                 widthConnectors = 0,
+                                 colConnectors = rgb(0, 0, 0, max = 1, alpha = 0, names = ""),
+                                 typeConnectors = "open",
+                                 ylab = bquote(~-Log[10] ~ italic(FDR)),
+                                 legendLabels = c("NS", expression(Log[2] ~ FC), "FDR", expression(FDR ~ and ~ log[2] ~ FC))
+                                 ) 
+```
+
+Plot RAL scores for reactions in vesicle secretion
+```{r}
+cols <- c("EssentialRxnsTask_S1", 
+          names(detail.scoring)[stringr::str_detect(names(detail.scoring), "ExpressionScoreEssential")])
+SV <- filter(detail.scoring, TaskID_S1=="sec_21") %>% 
+  dplyr::select(cols) %>%
+  tidyr::gather(key=Sample, value=RAL, ExpressionScoreEssentialRxnsTask_S1:ExpressionScoreEssentialRxnsTask_S6) %>%
+  setNames(c("Reaction", "Sample", "RAL")) %>% 
+  filter(RAL != -1)
+
+ggplot(SV) +
+  geom_line(aes(x=Reaction, y=RAL, colour=Sample, group=Sample)) +
+  scale_color_manual(values=c("olivedrab2", "olivedrab3", "olivedrab4", "royalblue1", "royalblue3", "royalblue4"), name = "Sample", labels = colnames(res.cellfie)) + theme(axis.text.x=element_text(angle=45, hjust=1))
+
+```
+
+Add specifity function
+```{r}
+addSpecificity <- function(detailScoring){
+  cols <- names(detailScoring)[stringr::str_detect(names(detailScoring), "GeneAssociatedToEssentialRxnsTask_")]
+  DS.list<- list()
+  for (sample in cols){
+    ID <- gsub(".*_", "", sample)
+    DS <- select(detailScoring, names(detailScoring)[stringr::str_detect(names(detailScoring), ID)]) %>%
+      filter(.[[6]] != -1)
+    specificity_df <- data.frame(1/(table(dplyr::select(DS, sample)))) %>% 
+      setNames(c("tmp", paste0("specificity_", ID))) %>%
+      mutate({{sample}}:=as.numeric(as.character(.[[1]]))) %>% select(!"tmp")
+    DS_S <- left_join(DS, specificity_df)
+    DS.list[[ID]] <- DS_S
+  }
+  return(DS.list)
+}
+```
+
+Plot specificity
+```{r}
+DS_sec <- filter(detail.scoring, TaskID_S1 %in% taskInfo.sec$taskID) %>%
+  addSpecificity() %>% bind_cols()
+
+cols <- c("EssentialRxnsTask_S1", 
+          names(DS_sec)[stringr::str_detect(names(DS_sec), "specificity")])
+SV <- filter(DS_sec, TaskID_S1=="sec_21") %>% 
+  dplyr::select(cols) %>%
+  tidyr::gather(key=Sample, value=S, specificity_S1:specificity_S6) %>%
+  setNames(c("Reaction", "Sample", "S"))
+
+ggplot(SV) +
+  geom_line(aes(x=Reaction, y=S, colour=Sample, group=Sample)) +
+  scale_color_manual(values=c("olivedrab2", "olivedrab3", "olivedrab4", "royalblue1", "royalblue3", "royalblue4"), name = "Sample", labels = colnames(res.cellfie)) + theme(axis.text.x=element_text(angle=45, hjust=1))
+
+View(filter(geneScore, Entrez %in% c(375, 8729)))
+View(filter(interactome_raw, Entrez %in% c(375, 8729)))
+```
+
+Table of SV determinant genes
+```{r}
+cols <- c("EssentialRxnsTask_S1", 
+          names(DS_sec)[stringr::str_detect(names(DS_sec), "GeneAssociatedToEssentialRxnsTask")])
+SV <- filter(DS_sec, TaskID_S1=="sec_21") %>% 
+  dplyr::select(cols) %>% 
+  setNames(c("EssentialRxn", paste0("Gene_S", c(1:6))))
+```
+
+
+
+
+
+
+
+
+
+Heatmap of binary activity
+```{r}
+cellLine.labels <- c(paste0("NAFLD",1:3), paste0("WT", 1:3))
+
+res.cellfie.binary <- res.cellfie.binary %>% 
+  setNames(cellLine.labels) %>%  #setNames(colnames(TPM.raw)[-1]) %>%
+  as.matrix() %>% `rownames<-`(taskInfo$Task)
+
+
+pheatmap::pheatmap(res.cellfie.binary, 
+                   main="Secretory Pathway Activity", 
+                   col= c("black","white"),
+                   border_color = NA,
+                   annotation_col = data.frame(condition=c(rep("NAFLD", 3), rep("WT", 3))) %>% `rownames<-`(colnames(res.cellfie.binary)),
+                   show_colnames = F,
+                   annotation_row = data.frame(system=taskInfo$System) %>% `rownames<-`(rownames(res.cellfie.binary)),
+                   legend_breaks = c(0,1))
+```
+

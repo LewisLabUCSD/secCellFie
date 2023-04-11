@@ -1,0 +1,329 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE)
+```
+
+```{r}
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(treemapify)
+library(RColorBrewer)
+library(factoextra)
+library(ReactomePA)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(enrichplot)
+```
+
+Load Curtis DESeq results
+```{r}
+DE <-fread("Input/DE.csv")
+DEsig_0.05 <- DE[padj < 0.05 & abs(log2FoldChange) > log2(1.5)]
+```
+
+Load TPM data
+```{r}
+TPM.raw <- feather::read_feather("Input/abund.feather") 
+TPM.cellfie <- fread("Input/Archive/TPM.FetuinB_pre.csv") # filtered to only include genes used in CellFie analysis
+```
+
+
+###################################################### 
+CELLFIE ANALYSIS
+######################################################
+
+Load Cellfie results
+```{r}
+res.cellfie <- fread("CellFie_output/transcriptome/local_mean/score.csv") %>% setNames(c("NAFLD_R1", "NAFLD_R2", "NAFLD_R3", "WT_R1", "WT_R2", "WT_R3"))
+taskInfo <-  fread("CellFie_output/transcriptome/local_mean/taskInfo.csv") %>%
+  mutate(Pathway = case_when(stringr::str_detect(taskInfos1, "sec_") ~ 'Secretory',
+         !stringr::str_detect(taskInfos1, "sec_") ~ 'Metabolism')) %>%
+  setNames(c("taskID", "Task", "System", "Subsystem", "Pathway"))
+detail.scoring <- fread("CellFie_output/transcriptome/local_mean/detailScoring.csv")
+
+```
+
+Differentially active tasks
+```{r}
+welch.test <- matrixTests::row_t_welch(res.cellfie[, c("NAFLD_R1", "NAFLD_R2", "NAFLD_R3")], res.cellfie[, c("WT_R1", "WT_R2", "WT_R3")]) %>% data.table() %>% cbind(taskInfo) %>% mutate(p.adjust := p.adjust(pvalue, method="BH")) %>% mutate(FC := mean.x/mean.y) %>% mutate(LFC := log2(FC))
+
+sig.tasks<- welch.test[, c("mean.x", "mean.y", "mean.diff", "FC" ,"LFC", "p.adjust", "Task", "System", "Subsystem", "Pathway")] %>% 
+  filter(p.adjust <= 0.1) %>% 
+  filter(LFC <= -log2(1.25) | LFC >= log2(1.25))
+
+```
+
+
+```{r}
+treemap.allCellfie <- welch.test[1:195, c("mean.diff", "LFC", "p.adjust", "taskInfos1", "taskInfos2", "taskInfos3", "taskInfos4")][, task := ifelse(mean.diff < 0,'significant decrease','significant increase')][p.adjust > 0.05, task := "non-significant"][LFC >= -log2(1.5) & LFC <= log2(1.5), task := "non-significant"][, area := 1] %>% na.omit()
+
+ggplot(treemap.allCellfie, aes(area=area, subgroup=taskInfos3, subgroup2= taskInfos4, fill=task)) +
+  scale_fill_manual(values=c("gray72", "lightcoral", "lightgreen"))+
+  geom_treemap(colour="white") +
+  geom_treemap_subgroup2_border(colour="black", size=1) +
+  geom_treemap_subgroup_border(colour="black", size=4) +
+  geom_treemap_subgroup_text(place="centre", grow=F, alpha=0.7, colour="gray99", min.size=0, reflow=T) +
+  geom_treemap_subgroup2_text(place="centre", grow=F, alpha=0.4, colour="black", min.size=0, reflow=T) +
+  theme(legend.title=element_text(size=15), legend.text = element_text(size=13))
+```
+
+Volcano plot
+```{r}
+selectLab.05 <- sig.tasks.05$taskInfos2[22:24]
+selectLab.1 <- sig.tasks.1$taskInfos2[24:27]
+welch.sec <- welch.test[196:216,]
+EnhancedVolcano::EnhancedVolcano(welch.sec, 
+                                 lab=welch.sec$taskInfos2,
+                                 x= "LFC", 
+                                 y="p.adjust", 
+                                 pCutoff=0.1, 
+                                 FCcutoff = log2(1.25),
+                                 labSize = 4,
+                                 #labCol="black",
+                                 #labFace="bold",
+                                 title = "Secretory Pathway CellFie Volano Plot",
+                                 subtitle = 'NAFLD vs. WT',
+                                 ylim=c(0,5),
+                                 xlim = c(-1, 1),
+                                 pointSize = c(ifelse(welch.sec$p.adjust<=0.1 & abs(welch.sec$LFC) >= log2(1.25), 3, 1.7)),
+                                 caption = bquote("fold change cutoff: 1.25; FDR cutoff: 0.1"),
+                                 legendPosition = "right",
+                                 legendLabSize = 14,
+                                 colAlpha = 0.9,
+                                 #colGradient = c('red3', 'royalblue'),
+                                 drawConnectors = T,
+                                 widthConnectors = 0,
+                                 colConnectors = rgb(0, 0, 0, max = 1, alpha = 0, names = ""),
+                                 typeConnectors = "open",
+                                 ylab = bquote(~-Log[10] ~ italic(FDR)),
+                                 legendLabels = c("NS", expression(Log[2] ~ FC), "FDR", expression(FDR ~ and ~ log[2] ~ FC))
+                                 ) 
+```
+
+Heatmap of binary activity
+```{r}
+cellLine.labels <- c(paste0("NAFLD",1:3), paste0("WT", 1:3))
+
+taskInfo.revise <- openxlsx::read.xlsx("/Users/helenmasson/Desktop/SenateExam/Aim2_CellFie/SecPathway.CellFIE/usingGeM/Generate_essentialRxns_manual/essentialRxn_notebook2022.xlsx", sheet="TaskInfo")
+
+res.cellfie.binary <- fread("FetuinB_output/local_mean/secretion/score_binary.csv") %>% 
+  setNames(cellLine.labels) %>%  #setNames(colnames(TPM.raw)[-1]) %>%
+  as.matrix() %>% `rownames<-`(taskInfo.revise$Task)
+
+
+pheatmap::pheatmap(res.cellfie.binary, 
+                   main="Secretory Pathway Activity", 
+                   col= c("black","white"),
+                   border_color = NA,
+                   annotation_col = data.frame(condition=c(rep("NAFLD", 3), rep("WT", 3))) %>% `rownames<-`(colnames(res.cellfie.binary)),
+                   show_colnames = F,
+                   annotation_row = data.frame(system=taskInfo.revise$System, subsystem=taskInfo.revise$Subsystem) %>% `rownames<-`(rownames(res.cellfie.binary)),
+                   legend_breaks = c(0,1))
+```
+
+
+###################################################### 
+PCA
+######################################################
+
+PCA using TPM
+```{r}
+### prepare expression data for PCA
+TPM.matrix <- as.matrix(TPM.raw[, -1]) %>% `rownames<-`(TPM.raw$geneSymbol)
+# remove constant/zero columns
+TPM.matrix <- TPM.matrix[matrixStats::rowSds(TPM.matrix) != 0 ,]
+
+### define cell line labels and colors
+cellLine.labels <- as.factor(c(rep("NAFLD",3), rep("WT", 3)))
+cellLine_col <- brewer.pal(4,"Dark2")[as.numeric(cellLine.labels)]
+
+# PCA
+res.pca <- prcomp(t(TPM.matrix), scale=T)
+
+# visualize eigenvalues/variances
+fviz_screeplot(res.pca, addlabels=T, ylim = c(0, 100))
+
+# plot individuals on first two components
+fviz_pca_ind(res.pca,
+             geom.ind = c("text", "point"),
+             pointsize = 3,
+             mean.point = FALSE,
+             show.legend=FALSE,
+             habillage = as.factor(cellLine.labels),
+             palette = "Dark2",
+             legend.title = "Cell Line",
+             repel = TRUE     # Avoid text overlapping
+) + theme(text=element_text(size=4), axis.text = element_text(size = 10), axis.title = element_text(size = 10), legend.text = element_text(size = 10), legend.title = element_text(size = 10), plot.title = element_text(size = 20))
+
+## Variable contributions to the principal axes
+# Contributions of variables to PC1
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 5)
+# Contributions of variables to PC2
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 5)
+```
+
+PCA using CellFie
+```{r}
+### prepare expression data for PCA
+cellfie.matrix <- as.matrix(res.cellfie.sec) %>% `rownames<-`(taskInfo.sec$taskInfos2)
+# remove constant/zero columns
+cellfie.matrix <- cellfie.matrix[matrixStats::rowSds(cellfie.matrix) != 0 ,]
+
+# PCA
+res.pca <- prcomp(t(cellfie.matrix), scale=T)
+
+# visualize eigenvalues/variances
+fviz_screeplot(res.pca, addlabels=T, ylim = c(0, 100))
+
+# plot individuals on first two components
+fviz_pca_ind(res.pca,
+             geom.ind = c("text", "point"),
+             pointsize = 3,
+             mean.point = FALSE,
+             show.legend=FALSE,
+             habillage = as.factor(cellLine.labels),
+             palette = "Dark2",
+             legend.title = "Cell Line",
+             repel = TRUE     # Avoid text overlapping
+) + theme(text=element_text(size=4), axis.text = element_text(size = 10), axis.title = element_text(size = 10), legend.text = element_text(size = 10), legend.title = element_text(size = 10), plot.title = element_text(size = 20))
+
+## Variable contributions to the principal axes
+# Contributions of variables to PC1
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 5)
+# Contributions of variables to PC2
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 5)
+```
+
+###################################################### 
+ENRICHMENT
+######################################################
+
+```{r}
+# Remove any NA values (LFC==NA)
+#DE_GSEA <- DE[log2FoldChange != "NA"]
+DE_GSEA <- left_join(TPM.cellfie[, c("geneSymbol", "Entrez")], DE, by=c("geneSymbol"="symbol.sep")) 
+sum(is.na(DE_GSEA$log2FoldChange))
+
+# Extract and name LFC
+LFC.entrez <- DE_GSEA$log2FoldChange[!is.na(DE_GSEA$Entrez)] %>% setNames(DE_GSEA$Entrez[!is.na(DE_GSEA$Entrez)]) %>% sort(decreasing = T)
+LFC.geneName <- DE_GSEA$log2FoldChange[!is.na(DE_GSEA$geneSymbol)] %>% setNames(DE_GSEA$geneSymbol[!is.na(DE_GSEA$geneSymbol)]) %>% sort(decreasing = T)
+```
+GSEA using conventional terms/databases
+```{r}
+# GSEA using gene sets from KEGG
+set.seed(189)
+gseaKEGG <- gseKEGG(geneList = LFC.entrez,
+                    organism = "hsa",
+                    minGSSize = 10,
+                    pvalueCutoff = 0.05,
+                    pAdjustMethod = "BH",
+                    verbose = F) %>% setReadable(OrgDb=org.Hs.eg.db, "ENTREZID")
+View(data.table(gseaKEGG@result)[p.adjust <= 0.01 ,])
+# dotplot(gseaKEGG, showCategory=10, split=".sign") + facet_grid(.~.sign) + 
+#   theme(axis.text.y= element_text(size = 20), axis.text.x= element_text(size = 20)) +
+#   theme(text = element_text(size = 20), plot.title = element_text(size=20))+
+#   ggtitle("GSEA KEGG Pathway")+
+#   theme(plot.title = element_text(hjust = 0.3))
+
+# GSEA Reactome
+set.seed(189)
+gseaReactome <- gsePathway(geneList = LFC.entrez,
+                           organism = "human",
+                           minGSSize = 10,
+                           pvalueCutoff = 0.05,
+                           pAdjustMethod = 'BH',
+                           verbose = F) %>% setReadable(OrgDb=org.Hs.eg.db, "ENTREZID")
+View(data.table(gseaReactome@result)[p.adjust <= 0.01 ,])
+
+## GSEA using gene sets associated with GO terms
+set.seed(189)
+gseaGO_BP <- gseGO(geneList = LFC.geneName,
+                OrgDb = org.Hs.eg.db,
+                keyType = 'SYMBOL',
+                ont = 'BP',
+                minGSSize = 10,
+                pvalueCutoff = 0.01,
+                pAdjustMethod = 'BH',
+                verbose = F) %>% clusterProfiler::simplify(cutoff = 0.8, by="p.adjust", select_fun=min)
+View(data.table(gseaGO_BP@result)[p.adjust <= 0.01 ,])
+
+set.seed(189)
+gseaGO_MF <- gseGO(geneList = LFC.geneName,
+                   OrgDb = org.Hs.eg.db,
+                   keyType = 'SYMBOL',
+                   ont = 'MF',
+                   minGSSize = 10,
+                   pvalueCutoff = 0.01,
+                   pAdjustMethod = 'BH',
+                   verbose = F) %>% clusterProfiler::simplify(cutoff = 0.8, by="p.adjust", select_fun=min)
+View(data.table(gseaGO_MF@result)[p.adjust <= 0.01 ,])
+
+set.seed(189)
+gseaGO_CC <- gseGO(geneList = LFC.geneName,
+                   OrgDb = org.Hs.eg.db,
+                   keyType = 'SYMBOL',
+                   ont = 'CC',
+                   minGSSize = 10,
+                   pvalueCutoff = 0.01,
+                   pAdjustMethod = 'BH',
+                   verbose = F) %>% clusterProfiler::simplify(cutoff = 0.8, by="p.adjust", select_fun=min)
+View(data.table(gseaGO_CC@result)[p.adjust <= 0.01 ,])
+
+```
+
+GSEA using feizi sec pathway terms
+```{r}
+term2gene_secM <- data.table(readRDS("/Users/helenmasson/Desktop/SenateExam/Data/secPathway/secMfeizi_term2gene.RDS"))
+
+set.seed(17)
+p_cutoff = 0.1
+gsea_feizi <- GSEA(LFC.entrez[names(LFC.entrez) %in% term2gene_secM$ENTREZID], TERM2GENE=term2gene_secM[, c("Subsystem", "ENTREZID")],minGSSize = 8,
+                  verbose=FALSE, pvalueCutoff = p_cutoff, pAdjustMethod = 'BH') %>% setReadable(OrgDb=org.Hs.eg.db, "ENTREZID")
+
+View(data.table(gsea_feizi@result))
+```
+
+Visualization
+```{r}
+cnetplot(gsea_feizi, foldChange=LFC.entrez, categorySize="geneNum", colorEdge=T, cex_label_category=1, cex_label_gene=0.5)
+#dotplot(gsea_feizi)
+```
+
+#############################
+VISUALIZE CELLFIE RESULTS
+#############################
+
+```{r}
+welch.test <- matrixTests::row_t_welch(res.cellfie[, c("TR1", "TR2", "TR3")], res.cellfie[, c("WR1", "WR2", "WR3")]) %>% data.table() %>% cbind(taskInfo) %>% mutate(p.adjust := p.adjust(pvalue, method="BH")) %>% mutate(FC := mean.x/mean.y)
+sig.tasks <- welch.test[, c("mean.x", "mean.y", "mean.diff", "FC", "p.adjust", "taskInfos1", "taskInfos2", "taskInfos3", "taskInfos4")] %>% filter(p.adjust <= 0.05)
+sig.tasks <- welch.test[, c("mean.x", "mean.y", "mean.diff", "FC", "p.adjust", "taskInfos1", "taskInfos2", "taskInfos3", "taskInfos4")] %>% filter(p.adjust <= 0.05) %>% filter(FC <= 0.8 | FC >= 1.2)
+```
+
+```{r}
+taskInfos3_percentDiff <- data.table(table(taskInfo$taskInfos3)) %>% setNames(c("System", "task.count")) %>% left_join(data.table(table(sig.tasks$taskInfos3)), by=c("System"= "V1")) %>% dplyr::rename(sig.task.count=N) %>% mutate(percent.sig=(sig.task.count/task.count)*100)
+```
+
+```{r}
+taskInfos4_percentDiff <- data.table(table(taskInfo$taskInfos4)) %>% setNames(c("Subsystem", "task.count")) %>% left_join(data.table(table(sig.tasks$taskInfos4)), by=c("Subsystem"= "V1")) #%>% dplyr::rename(sig.task.count=N) %>% mutate(percent.sig=(sig.task.count/task.count)*100) %>% left_join(taskInfo[, c("taskInfos3", "taskInfos4")], by=c("Subsystem"="taskInfos4")) %>% dplyr::rename(System=taskInfos3) %>% setcolorder(c("System", "Subsystem", "task.count", "sig.task.count", "percent.sig"))
+```
+
+
+```{r}
+treemap.allCellfie <- welch.test[, c("mean.diff", "FC", "p.adjust", "taskInfos1", "taskInfos2", "taskInfos3", "taskInfos4")][, task := ifelse(mean.diff < 0,'significant decrease','significant increase')][p.adjust > 0.05, task := "non-significant"][FC >= 0.8 & FC <= 1.2, task := "non-significant"][, area := 1] %>% na.omit()
+
+ggplot(treemap.allCellfie, aes(area=area, subgroup=taskInfos3, subgroup2= taskInfos4, fill=task)) +
+  scale_fill_manual(values=c("gray72", "lightcoral", "lightgreen"))+
+  geom_treemap(colour="white") +
+  geom_treemap_subgroup2_border(colour="black", size=1) +
+  geom_treemap_subgroup_border(colour="black", size=4) +
+  geom_treemap_subgroup_text(place="centre", grow=F, alpha=0.7, colour="gray99", min.size=0, reflow=T) +
+  geom_treemap_subgroup2_text(place="centre", grow=F, alpha=0.4, colour="black", min.size=0, reflow=T) +
+  theme(legend.title=element_text(size=15), legend.text = element_text(size=13))
+```
+
+

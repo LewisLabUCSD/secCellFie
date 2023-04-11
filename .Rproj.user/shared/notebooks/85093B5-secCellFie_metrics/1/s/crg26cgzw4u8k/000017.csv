@@ -1,4 +1,0 @@
-"0","ggraph(mygraph, 'treemap') + "
-"0","  geom_node_tile(aes(fill = depth), size = 0.25) + "
-"0","  geom_node_text(aes(label = name)) + "
-"0","  scale_fill_viridis()"

@@ -1,0 +1,583 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Proteomics analysis of FetuinB exprssing cells (WT vs NAFLD)
+
+```{r}
+#lapply(paste('package:',names(sessionInfo()$otherPkgs),sep=""),detach,character.only=TRUE,unload=TRUE)
+
+library(data.table)
+library(stringr)
+library(openxlsx)
+library(org.Hs.eg.db)
+library(AnnotationDbi)
+library(clusterProfiler)
+library(ReactomePA)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(factoextra)
+library(ggfortify)
+library(colorspace)
+library(RColorBrewer)
+library(ggrepel)
+library(EnhancedVolcano)
+library(plyr)
+library(Rmisc)
+```
+
+###################################################### 
+LOAD DATA
+######################################################
+
+Caressa's data
+```{r}
+protLFQ <- readxl::read_excel("Input/Summary_Results_HEP.xlsx", sheet="Perseus")
+protLFQ_trim <- data.table(protLFQ)[, c("Gene names","Welch's T-test Difference LFQ intensity TRAb_LFQ intensity WTAb", "Welch's T-test q-value LFQ intensity TRAb_LFQ intensity WTAb")] %>% setNames(c("geneName", "LFQ_FetB.vs.WT", "qvalue"))
+#note: can't include protein names because number of proteins names does NOT equal number of gene names for split
+protLFQ_parse <- mutate(protLFQ_trim, id=as.character(1:nrow(protLFQ_trim))) %>% tidyr::separate_rows(geneName, sep=";") %>% data.table()
+
+protLFQ_sig <- protLFQ_parse[qvalue <= 0.1 & abs(LFQ_FetB.vs.WT) >= log2(1.5) ,][order(LFQ_FetB.vs.WT)]
+```
+
+Prep data
+```{r}
+# Remove any NA values (LFC==NA and geneName==NA)
+protGSEA <- protLFQ_parse[LFQ_FetB.vs.WT != "NA"][geneName != "NA"]
+# Add column of entrez IDs
+length(intersect(protGSEA$geneName, keys(org.Hs.eg.db, keytype="SYMBOL")))
+length(intersect(protGSEA$geneName, keys(org.Hs.eg.db, keytype="ALIAS")))
+entrezMap <- AnnotationDbi::select(org.Hs.eg.db, keys=protGSEA$geneName, keytype = "SYMBOL", columns="ENTREZID") #if row has multiple gene names, only use first to map
+idx <- match(protGSEA$geneName, entrezMap$SYMBOL)
+#View(data.frame(protGSEA$geneName, entrezMap$SYMBOL[idx])) #sanity check
+protGSEA$Entrez <- entrezMap$ENTREZID[idx]
+
+```
+
+###################################################### 
+DATA VISUALIZATION
+######################################################
+```{r prep data}
+interaction.data <- protLFQ[, c("TRAb_R1", "TRAb_R2", "TRAb_R3", "WTAb_R1", "WTAb_R2", "WTAb_R3")] %>%
+  setNames(c("NAFLD_R1", "NAFLD_R2", "NAFLD_R3", "WT_R1", "WT_R2", "WT_R3")) %>%
+  as.matrix() %>%
+  BBmisc::setRowNames(seq(1:nrow(protLFQ)))
+cellLine.labels <- as.factor(c(rep("NAFLD",3), rep("WT", 3)))
+cellLine_col <- brewer.pal(4,"Dark2")[as.numeric(cellLine.labels)]
+```
+
+
+Volcano plot
+```{r}
+lab_italics <- paste0("italic('", protLFQ_trim$geneName, "')")
+selectLab_italics <- paste0(
+    "italic('",
+    protLFQ_trim$geneName[protLFQ_trim$qvalue <= 0.1],
+    "')")
+png("Figures/volcano_interactome.png", width=700, height=900)
+EnhancedVolcano::EnhancedVolcano(protLFQ_trim, 
+                                 lab=lab_italics, 
+                                 parseLabels=T,
+                                 boxedLabels = T,
+                                 x= "LFQ_FetB.vs.WT", 
+                                 y="qvalue", 
+                                 axisLabSize = 30,
+                                 pCutoff=0.1, 
+                                 FCcutoff = 1.5,
+                                 labSize = 10,
+                                 labCol="black",
+                                 labFace="bold",
+                                 title = "Interactomics Volano Plot",
+                                 titleLabSize = 30,
+                                 subtitle = 'NAFLD vs. WT',
+                                 subtitleLabSize = 28,
+                                 ylim=c(0,3),
+                                 pointSize = c(ifelse(protLFQ_trim$qvalue<=0.1, 10, 5)),
+                                 caption = bquote(~Log[2]~ "fold change cutoff: 1.5; FDR cutoff: 0.1"),
+                                 captionLabSize = 25,
+                                 legendPosition = "bottom",
+                                 legendLabels = c("NS", ~Log[2]~"FC", "FDR", ~Log[2]~"FC and FDR"),
+                                 legendLabSize = 28,
+                                 colAlpha = 0.9,
+                                 #colGradient = c('red3', 'royalblue'),
+                                 drawConnectors = T,
+                                 widthConnectors = 0,
+                                 ylab = expression("-Log"[10]*" FDR")
+                                 )
+dev.off()
+```
+
+Hierarchical clustering heatmap
+```{r}
+hclustfunc <-function(x) hclust(x, method="complete")
+distfunc <- function(x) dist(x, method="euclidean")
+scale.data <- scale(t(interaction.data))
+d <- distfunc(t(scale.data))
+fit <- hclustfunc(d)
+groups <- cutree(fit, k=2)
+cols <- brewer.pal(4, "Dark2")[3:4]
+
+png("Figures/hmap_interactome.png", width=850, height=1000)
+par(cex.main=3)
+hmap <- gplots::heatmap.2(t(scale.data),
+                  scale = "none",
+                  hclust=hclustfunc,
+                  distfun=distfunc,
+                  main="Interactomics",
+                  trace="none", 
+                  key=T,
+                  labRow = "",
+                  dendrogram = c("column"),
+                  denscol = "black",
+                  ColSideColors = cellLine_col,
+                  RowSideColors = cols[groups],
+                  key.xlab = "Interaction Z-Score",
+                  key.ylab = "",
+                  key.title = "Color Key",
+                  key.size = 2,
+                  key.par = list(cex.lab=2.5, cex.main=2.5, cex.axis=2.5, cex.names=2.5, mar=c(6,5.5,6,0)),
+                  key.xtickfun = function(){
+                    mtext("Count",cex=2, adj=0.5, side=2, line=3, padj=0)
+                  },
+                  srtCol = 45,
+                  cexCol=3,
+                  offsetCol=0.05,
+                  mar=c(11,5))
+legend(y=0.7, x=-0.05, xpd=TRUE, legend = c("Cluster 1", "Cluster 2"), fill = unique(cols[groups]), cex=2.2)
+legend(y=0.55, x=-0.05, xpd=TRUE, legend = c("NAFLD", "WT"), fill = unique(cellLine_col), cex=2.2)
+dev.off()
+```
+
+Add gene cluster trends
+```{r}
+gene_cluster <- tibble::enframe(groups) %>% setNames(c("gene", "cluster")) %>%
+  inner_join(data.frame(gene=colnames(scale.data), t(scale.data))) %>% setcolorder(c("gene", "cluster", rownames(scale.data)[hmap$colInd]))
+#convert wide to long
+gene_cluster.long <- gather(gene_cluster, sample, LFQ, NAFLD_R3:WT_R1, factor_key=T)
+
+### Too noisy to plot every protein. Summarize trend with mean.
+gene_cluster.summary <- ddply(gene_cluster.long, c("cluster", "sample"), summarise,
+                              mean=CI(LFQ, ci=0.95)['mean'],
+                              sd=sd(LFQ),
+                              se=plotrix::std.error(LFQ),
+                              uci=CI(LFQ, ci=0.95)['upper'],
+                              lci=CI(LFQ, ci=0.95)['lower'])
+cluster.1 <- gene_cluster.summary[gene_cluster.summary$cluster==1 ,] %>% mutate(index=1:6)
+cluster.2 <- gene_cluster.summary[gene_cluster.summary$cluster==2 ,] %>% mutate(index=1:6)
+```
+
+NEW gene cluster trend -- using shaded ribbon to show spread
+```{r}
+trend.ribbon <- function(summary.data) {
+  ggplot(summary.data, aes(index, mean)) +
+  geom_line(color="firebrick", size=1) +
+  geom_ribbon(aes(ymin=mean-se, ymax=mean+se), alpha=0.1, color="black", linetype="dotted")
+}
+
+trend.ribbon(cluster.1)
+trend.ribbon(cluster.2)
+```
+
+NEW gene cluster trend -- using error bars wth 95 CI
+```{r}
+trend.errbar <- function(summary.data) {
+  ggplot(summary.data, aes(sample, mean, group=cluster)) +
+  geom_point() +
+  geom_line(color="firebrick", size=2) +
+  geom_errorbar(aes(ymin=lci, ymax=uci), width=0.1) +
+  scale_x_discrete(labels= as.character(summary.data$sample)) +
+    theme(text=element_text(size=20), axis.text.x=element_text(angle = -45, hjust = 0))
+}
+
+trend.errbar(cluster.1)
+trend.errbar(cluster.2)
+```
+
+Hypergeometric enrichment of the 2 clusters
+Cluster 1
+```{r}
+#length(setdiff(names(groups), keys(org.Hs.eg.db, keytype="ALIAS")))
+## replace protein group numeric id with gene names
+cluster.gene.map <- full_join(protGSEA, gene_cluster[, c("gene", "cluster")], by=c("id"="gene"))
+
+set.seed(18)
+GO.MF_cluster1 <- enrichGO(gene = na.omit(cluster.gene.map$geneName[cluster.gene.map$cluster==1]),
+         universe = na.omit(cluster.gene.map$geneName),
+         keyType = 'SYMBOL',
+         OrgDb = org.Hs.eg.db,
+         minGSSize = 8,
+         ont= "MF",
+         pAdjustMethod = "BH",
+         pvalueCutoff = 0.05,
+         qvalueCutoff = 0.1) %>% clusterProfiler::simplify(cutoff = 0.8, by="p.adjust", select_fun=min) #%>% clusterProfiler::simplify(cutoff = 0.8, by="p.adjust", select_fun=min)
+View(data.table(GO.MF_cluster1@result)[p.adjust <= 0.1 ,])
+
+set.seed(18)
+GO.BP_cluster1 <- enrichGO(gene = na.omit(cluster.gene.map$geneName[cluster.gene.map$cluster==1]),
+         universe = na.omit(cluster.gene.map$geneName),
+         keyType = 'SYMBOL',
+         OrgDb = org.Hs.eg.db,
+         minGSSize = 8,
+         ont= "BP",
+         pAdjustMethod = "BH",
+         pvalueCutoff = 0.05,
+         qvalueCutoff = 0.1) %>% clusterProfiler::simplify(cutoff = 0.8, by="p.adjust", select_fun=min)
+View(data.table(GO.BP_cluster1@result)[p.adjust <= 0.1 ,])
+
+set.seed(18)
+GO.CC_cluster1 <- enrichGO(gene = na.omit(cluster.gene.map$geneName[cluster.gene.map$cluster==1]),
+         universe = na.omit(cluster.gene.map$geneName),
+         keyType = 'SYMBOL',
+         OrgDb = org.Hs.eg.db,
+         minGSSize = 8,
+         ont= "CC",
+         pAdjustMethod = "BH",
+         pvalueCutoff = 0.05,
+         qvalueCutoff = 0.1) %>% clusterProfiler::simplify(cutoff = 0.8, by="p.adjust", select_fun=min)
+View(data.table(GO.CC_cluster1@result)[p.adjust <= 0.1 ,])
+
+######### KEGG and Reactome enrichment
+
+set.seed(18)
+KEGG_cluster1 <- enrichKEGG(gene = na.omit(cluster.gene.map$Entrez[cluster.gene.map$cluster==1]),
+                            universe = na.omit(cluster.gene.map$Entrez),
+                            organism = "hsa",
+                            minGSSize = 8,
+                            pvalueCutoff = 0.05,
+                            pAdjustMethod = "BH")
+View(data.table(KEGG_cluster1@result)[p.adjust <= 0.1 ,])
+
+set.seed(18)
+Reactome_cluster1 <- enrichPathway(gene = na.omit(cluster.gene.map$Entrez[cluster.gene.map$cluster==1]),
+                                   universe = na.omit(cluster.gene.map$Entrez),
+                                   organism = "human",
+                                   minGSSize = 8,
+                                   pvalueCutoff = 0.05,
+                                   pAdjustMethod = 'BH')
+View(data.table(Reactome_cluster1@result)[p.adjust <= 0.1 ,])
+```
+Cluster 2
+```{r}
+set.seed(18)
+GO.MF_cluster2 <- enrichGO(gene = na.omit(cluster.gene.map$geneName[cluster.gene.map$cluster==2]),
+         universe = na.omit(cluster.gene.map$geneName),
+         keyType = 'SYMBOL',
+         OrgDb = org.Hs.eg.db,
+         minGSSize = 8,
+         ont= "MF",
+         pAdjustMethod = "BH",
+         pvalueCutoff = 0.05,
+         qvalueCutoff = 0.1) %>% clusterProfiler::simplify(cutoff = 0.8, by="p.adjust", select_fun=min)
+View(data.table(GO.MF_cluster2@result)[p.adjust <= 0.1 ,])
+
+set.seed(18)
+GO.BP_cluster2 <- enrichGO(gene = na.omit(cluster.gene.map$geneName[cluster.gene.map$cluster==2]),
+         universe = na.omit(cluster.gene.map$geneName),
+         keyType = 'SYMBOL',
+         OrgDb = org.Hs.eg.db,
+         minGSSize = 8,
+         ont= "BP",
+         pAdjustMethod = "BH",
+         pvalueCutoff = 0.05,
+         qvalueCutoff = 0.1) %>% clusterProfiler::simplify(cutoff = 0.8, by="p.adjust", select_fun=min)
+View(data.table(GO.BP_cluster2@result)[p.adjust <= 0.1 ,])
+
+set.seed(18)
+GO.CC_cluster2 <- enrichGO(gene = na.omit(cluster.gene.map$geneName[cluster.gene.map$cluster==2]),
+         universe = na.omit(cluster.gene.map$geneName),
+         keyType = 'SYMBOL',
+         OrgDb = org.Hs.eg.db,
+         minGSSize = 8,
+         ont= "CC",
+         pAdjustMethod = "BH",
+         pvalueCutoff = 0.05,
+         qvalueCutoff = 0.1) %>% clusterProfiler::simplify(cutoff = 0.8, by="p.adjust", select_fun=min)
+View(data.table(GO.CC_cluster2@result)[p.adjust <= 0.1 ,])
+
+######### KEGG and Reactome enrichment
+
+set.seed(18)
+KEGG_cluster2 <- enrichKEGG(gene = na.omit(cluster.gene.map$Entrez[cluster.gene.map$cluster==2]),
+                            universe = na.omit(cluster.gene.map$Entrez),
+                            organism = "hsa",
+                            minGSSize = 8,
+                            pvalueCutoff = 0.05,
+                            pAdjustMethod = "BH")
+View(data.table(KEGG_cluster2@result)[p.adjust <= 0.1 ,])
+
+set.seed(18)
+Reactome_cluster2 <- enrichPathway(gene = na.omit(cluster.gene.map$Entrez[cluster.gene.map$cluster==2]),
+                                   universe = na.omit(cluster.gene.map$Entrez),
+                                   organism = "human",
+                                   minGSSize = 8,
+                                   pvalueCutoff = 0.05,
+                                   pAdjustMethod = 'BH')
+View(data.table(Reactome_cluster2@result)[p.adjust <= 0.1 ,])
+```
+
+PCA
+```{r PCA analysis}
+# PCA
+res.pca <- prcomp(t(interaction.data), scale=F)
+
+# visualize eigenvalues/variances
+fviz_screeplot(res.pca, addlabels=T, ylim = c(0, 100))
+
+# plot individuals on first two components
+fviz_pca_ind(res.pca,
+             geom.ind = c("text", "point"),
+             pointsize = 3,
+             mean.point = FALSE,
+             show.legend=FALSE,
+             habillage = as.factor(cellLine.labels),
+             palette = "Dark2",
+             legend.title = "Cell Line",
+             repel = TRUE     # Avoid text overlapping
+) + theme(text=element_text(size=4), axis.text = element_text(size = 10), axis.title = element_text(size = 10), legend.text = element_text(size = 10), legend.title = element_text(size = 10), plot.title = element_text(size = 20))
+
+## Variable contributions to the principal axes
+# Contributions of variables to PC1
+fviz_contrib(res.pca, choice = "var", axes = 1, top = 5)
+# Contributions of variables to PC2
+fviz_contrib(res.pca, choice = "var", axes = 2, top = 5)
+
+# Graph of variables
+fviz_pca_var(res.pca,
+             col.var = "contrib", # Color by contributions to the PC
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE     # Avoid text overlapping
+)
+
+```
+
+###################################################### 
+GSEA
+######################################################
+
+```{r}
+# Extract and name LFC
+LFC_entrez <- protGSEA$LFQ_FetB.vs.WT[!is.na(protGSEA$Entrez)] %>% setNames(protGSEA$Entrez[!is.na(protGSEA$Entrez)]) %>% sort(decreasing = T)
+LFC_geneName <- protGSEA$LFQ_FetB.vs.WT[!is.na(protGSEA$geneName)] %>% setNames(protGSEA$geneName[!is.na(protGSEA$geneName)]) %>% sort(decreasing=T)
+
+# Remove any duplicates
+LFC_entrez <- LFC_entrez[which(duplicated(names(LFC_entrez))==F)]
+LFC_geneName <- LFC_geneName[which(duplicated(names(LFC_geneName))==F)]
+```
+
+
+GSEA using gene sets from KEGG
+```{r}
+set.seed(18)
+gseaKEGG <- gseKEGG(geneList = LFC_entrez,
+        organism = "hsa",
+        minGSSize = 10,
+        pvalueCutoff = 0.01,
+        pAdjustMethod = "BH",
+        verbose = F) %>% setReadable(OrgDb=org.Hs.eg.db, "ENTREZID")
+View(data.table(gseaKEGG@result)[p.adjust <= 0.05 ,])
+```
+
+GSEA using gene sets from GO Cellular Component
+```{r}
+set.seed(18)
+gseaGO_CC <- gseGO(geneList = LFC_geneName,
+                   OrgDb = org.Hs.eg.db,
+                   keyType="SYMBOL",
+                   ont = 'CC',
+                   minGSSize = 10,
+                   pvalueCutoff = 0.01,
+                   pAdjustMethod = 'BH',
+                   verbose = F) %>% clusterProfiler::simplify(cutoff = 0.8, by="p.adjust", select_fun=min)
+View(data.table(gseaGO_CC@result)[p.adjust <= 0.1 ,])
+```
+
+GSEA using gene sets from GO Biological Process
+```{r}
+set.seed(18)
+gseaGO_BP <- gseGO(geneList = LFC_geneName,
+                   OrgDb = org.Hs.eg.db,
+                   keyType="SYMBOL",
+                   ont = 'BP',
+                   minGSSize = 10,
+                   pvalueCutoff = 0.05,
+                   pAdjustMethod = 'BH',
+                   verbose = F) %>% clusterProfiler::simplify(cutoff = 0.8, by="p.adjust", select_fun=min)
+View(data.table(gseaGO_BP@result)[p.adjust <= 0.1 ,])
+
+```
+
+GSEA using gene sets from GO Molecular Function
+```{r}
+set.seed(18)
+gseaGO_MF <- gseGO(geneList = LFC_geneName,
+                   OrgDb = org.Hs.eg.db,
+                   keyType="SYMBOL",
+                   ont = 'MF',
+                   minGSSize = 10,
+                   pvalueCutoff = 0.05,
+                   pAdjustMethod = 'BH',
+                   verbose = F) %>% clusterProfiler::simplify(cutoff = 0.8, by="p.adjust", select_fun=min)
+View(data.table(gseaGO_MF@result)[p.adjust <= 0.1 ,])
+
+```
+
+GSEA using gene sets from Reactome
+```{r}
+set.seed(18)
+gseaReactome <- gsePathway(geneList = LFC_entrez,
+                           organism = "human",
+                           minGSSize = 10,
+                           pvalueCutoff = 0.05,
+                           pAdjustMethod = 'BH',
+                           verbose = F) %>% setReadable(OrgDb=org.Hs.eg.db, "ENTREZID")
+View(data.table(gseaReactome@result)[p.adjust <= 0.1 ,])
+```
+
+
+save GSEA results in excel workbook to cherry pick from
+```{r}
+allGSEA <- list("KEGG"=data.table(gseaKEGG@result)[p.adjust <= 0.1 ,], "Reactome"=data.table(gseaReactome@result)[p.adjust <= 0.1 ,], "GO_CC"=data.table(gseaGO_CC@result)[p.adjust <= 0.1 ,], "GO_BP"=data.table(gseaGO_BP@result)[p.adjust <= 0.1 ,], "GO_MF"=data.table(gseaGO_MF@result)[p.adjust <= 0.1 ,])
+write.xlsx(allGSEA, "Output/gseaResults_interactomeCaressa.xlsx")
+saveRDS(allGSEA, "Output/allGSEA_interactomeCaressa.RDS")
+```
+
+Plot interesting results
+```{r}
+# Load cherry picked interesting results
+gsea_all <- readxl::read_excel("Output/gseaResults_interactomeCaressa_cherryPick.xlsx", sheet="cherryPick")
+numCoreEnrich <- lapply(gsea_all$core_enrichment, function(x) {strsplit(x,'/')})
+num <- lapply(numCoreEnrich, function(x) {length(unlist(x))})
+gsea_all$coreEnrichment <- unlist(num)
+gsea_all$Description <- tolower(gsea_all$Description)
+
+subset.interesting <- gsea_all
+subset.interesting$Description <- factor(subset.interesting$Description, levels = subset.interesting$Description[order(subset.interesting$NES)])
+
+# color terms related to secretory pathway
+term.color <- ifelse(subset.interesting$Tag == "secPathway", "red", "gray25")
+
+## dotplot
+ggplot(subset.interesting, # you can replace the numbers to the row number of pathway of your interest
+       aes(x = NES, y = Description)) +
+  geom_point(aes(size = coreEnrichment, color = p.adjust)) +
+  theme_bw(base_size = 19) +
+  scale_colour_gradient(limits=c(0, 0.05), low="red", high="blue") +
+  ylab(NULL) + 
+  theme(axis.text.y = element_text(colour=term.color), legend.title=element_text(size=14), axis.title = element_text(size = 14)) +
+  ggtitle("GSEA of Fetuin B Interactome")
+
+## barplot
+ggplot(subset.interesting, # you can replace the numbers to the row number of pathway of your interest
+       aes(x = NES, y = Description)) +
+  geom_col(aes(fill = p.adjust)) +
+  theme_bw(base_size = 20) +
+  scale_fill_gradient(limits=c(0, 0.05), low="red", high="blue") +
+  ylab(NULL) + 
+  theme(axis.text.y = element_text(colour=term.color)) +
+  ggtitle("GSEA of Fetuin B Interactome")
+```
+
+Lolipop
+```{r}
+ross <- gsea_all %>% arrange(NES) 
+ross %>%
+  mutate(Description=factor(Description, levels=Description)) %>%
+  ggplot( aes(x=Description, y=NES, color=database)) +
+    geom_segment( aes(xend=Description, yend=0), color = "grey50") +
+    geom_point(size=50*ross$p.adjust) +
+    coord_flip() +
+    theme_bw() +
+    xlab("")
+rm(ross)
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###################################################### 
+OUTLIER SITATION
+######################################################
+
+check outlierness of samples
+```{r}
+protLFQ.samples <- readxl::read_excel("Input/Summary_Results_HEP.xlsx", sheet="Perseus") %>% data.table() %>% select(c("TRAb_R1", "TRAb_R2", "TRAb_R3", "WTAb_R1", "WTAb_R2", "WTAb_R3"))
+colSums(protLFQ.samples)
+plot(x=1:6, y=colSums(protLFQ.samples))
+```
+Pearson correlation among biological replicates
+```{r}
+cor.test(protLFQ.samples$TRAb_R1, protLFQ.samples$TRAb_R2, method=c("pearson"))[c("estimate", "p.value")] %>% as.data.frame() %>% `rownames<-`("T1.T2") %>%
+  rbind(cor.test(protLFQ.samples$TRAb_R1, protLFQ.samples$TRAb_R3, method=c("pearson"))[c("estimate", "p.value")] %>% as.data.frame() %>% `rownames<-`("T1.T3")) %>%
+  rbind(cor.test(protLFQ.samples$TRAb_R2, protLFQ.samples$TRAb_R3, method=c("pearson"))[c("estimate", "p.value")] %>% as.data.frame() %>% `rownames<-`("T2.T3"))
+
+cor.test(protLFQ.samples$WTAb_R1, protLFQ.samples$WTAb_R2, method=c("pearson"))[c("estimate", "p.value")] %>% as.data.frame() %>% `rownames<-`("W1.W2") %>%
+  rbind(cor.test(protLFQ.samples$WTAb_R1, protLFQ.samples$WTAb_R3, method=c("pearson"))[c("estimate", "p.value")] %>% as.data.frame() %>% `rownames<-`("W1.W3")) %>%
+  rbind(cor.test(protLFQ.samples$WTAb_R2, protLFQ.samples$WTAb_R3, method=c("pearson"))[c("estimate", "p.value")] %>% as.data.frame() %>% `rownames<-`("W2.W3"))
+```
+
+
+###################################################### 
+LOOKING INTO FORMS OF VESICLE TRANSPORT 
+######################################################
+
+Looking into GO for vesicle specific terms
+```{r}
+library(GO.db)
+
+length(intersect(protGSEA$geneName, keys(org.Hs.eg.db, keytype="SYMBOL")))
+length(intersect(protGSEA$Entrez, keys(org.Hs.eg.db, keytype="ENTREZID")))
+GOterms <- data.table(AnnotationDbi::select(org.Hs.eg.db, keys=protGSEA$geneName, columns = c("GO"), keytype = "SYMBOL"))
+#only include CC terms
+GOterms_CC <- GOterms[ONTOLOGY=="CC"]
+setnames(GOterms_CC, "GO", "GOID")
+# remove any duplicates
+sum(duplicated(GOterms_CC))
+GOterms_CC <- distinct(GOterms_CC)
+
+#get corresponding GO terms
+ID2term <- AnnotationDbi::select(GO.db, keys=GOterms_CC$GO, columns="TERM", keytype = "GOID") %>% distinct()
+map_gene2term <- full_join(GOterms_CC, ID2term)
+# check and remove any duplicates
+sum(duplicated(map_gene2term))
+map_gene2term <- distinct(map_gene2term)
+
+secretionTerms <- c("exocytic vesicle", "secretory granule", "extracellular exosome", "autophagosome", "endosome to plasma membrane transport vesicle", "autolysosome", "endosome", "lysosome", "cytoplasmic vesicle", "clathrin-coated vesicle", "transport vesicle", "phagocytic vesicle", "extracellular vesicle", "exocytic vesicle", "amphisome", "multivesicular body") 
+
+secretionGenes <- map_gene2term[map_gene2term$TERM %in% secretionTerms, c("TERM", "SYMBOL")] %>% inner_join(protGSEA, by=c("SYMBOL"="geneName")) %>% distinct() %>% arrange(LFQ_FetB.vs.WT)
+
+secGenes_pos <- secretionGenes[LFQ_FetB.vs.WT > 0] %>% distinct()
+secGenes_neg <- secretionGenes[LFQ_FetB.vs.WT < 0] %>% distinct()
+
+gsea_vesicle <- GSEA(LFC_geneName[names(LFC_geneName) %in% secretionGenes$SYMBOL], TERM2GENE=secretionGenes[,c("TERM", "SYMBOL")], verbose=FALSE, pvalueCutoff = 0.1, pAdjustMethod = 'BH')
+
+```
+

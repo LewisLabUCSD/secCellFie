@@ -1,2 +1,0 @@
-"0","taskInfo <- openxlsx::read.xlsx(""Generate_essentialRxns_manual/essentialRxn_notebook2022.xlsx"", sheet=""TaskInfo"")"
-"0","count.system <- table(taskInfo$System) %>% data.table() %>% setNames(c(""System"", ""count""))"

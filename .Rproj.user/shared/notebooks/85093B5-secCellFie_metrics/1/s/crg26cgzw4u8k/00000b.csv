@@ -1,5 +1,0 @@
-"0","# With ggraph:"
-"0","ggraph(mygraph, layout = 'dendrogram') +"
-"0","  geom_edge_diagonal() +"
-"0","  geom_node_text(aes( label=name)) +"
-"0","  theme_void()"

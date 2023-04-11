@@ -1,0 +1,22 @@
+taskInfos1,taskInfos2,taskInfos3,taskInfos4
+sec_1,Co-translational translocation,Translocation,
+sec_2,Post translational translocation,Translocation,
+sec_3,GPI-anchor,Processing in the ER,PTMs
+sec_4,N-linked glycosylation,Processing in the ER,PTMs
+sec_5,Disulfide bond formation,Processing in the ER,PTMs
+sec_6,N-glycan processing (ER),Processing in the ER,Protein folding
+sec_7,Calnexin/calreticulin cycle,Processing in the ER,Protein folding
+sec_8,Recognition of misfolded protein,ERAD,
+sec_9,Retro-translocation & substrate ubiquitination,ERAD,
+sec_10,Proteasome degradation,ERAD,
+sec_11,Branching (N-acetylglucosaminyltransferases),Processing in the Golgi,N-glycan processing (Golgi)
+sec_12,Fucosylation (addition of fucose),Processing in the Golgi,N-glycan processing (Golgi)
+sec_13,Galactosylation (addition of galactose),Processing in the Golgi,N-glycan processing (Golgi)
+sec_14,Sialylation (addition of sialic acid),Processing in the Golgi,N-glycan processing (Golgi)
+sec_15,Mannose trimming (mannosidase),Processing in the Golgi,N-glycan processing (Golgi)
+sec_16,O-linked glycosylation,Processing in the Golgi,
+sec_17,Trafficking to endosomes (Clathrin Vesicles),Vessicle trafficking,
+sec_18,Golgi to ER trafficking (COPI),Vessicle trafficking,
+sec_19,COPII-LMAN1 mediated recognition,Vessicle trafficking,ER to Golgi trafficking (COPII)
+sec_20,COPII-LMAN2 mediated recognition,Vessicle trafficking,ER to Golgi trafficking (COPII)
+sec_21,Vesicle secretion,Vessicle trafficking,
