@@ -234,14 +234,19 @@ library(ggplot2)</code></pre>
 <p>Load pheno and count data</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuI3BoZW5vIGRhdGFcbnBoZW5vIDwtIG9wZW54bHN4OjpyZWFkLnhsc3goXCJJbnB1dC9TdXNhbl9Bbm5vdGF0aW9ucy54bHN4XCIsIHNoZWV0PVwiY2xlYW5cIikgJT4lXG4gIG11dGF0ZShjb25kaXRpb25fc3RhdGUgPSBwYXN0ZTAoY29uZGl0aW9uLCBcIl9cIiwgc3RhdGUpKVxuI2NvdW50IGRhdGFcbmNvdW50cyA8LSBmcmVhZChcIklucHV0L2NvdW50X2NsZWFuLmNzdlwiKVxuY291bnQubWF0cml4IDwtIGFzLm1hdHJpeChjb3VudHNbLCAtMV0pICU+JSBgcm93bmFtZXM8LWAoY291bnRzJGVudHJleklEKSAlPiUgbmEub21pdCgpXG5gYGAifQ== -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuI3BoZW5vIGRhdGFcbnBoZW5vIDwtIG9wZW54bHN4OjpyZWFkLnhsc3goXCJJbnB1dC9TdXNhbl9Bbm5vdGF0aW9ucy54bHN4XCIsIHNoZWV0PVwiY2xlYW5cIikgJT4lXG4gIG11dGF0ZShjb25kaXRpb25fc3RhdGUgPSBwYXN0ZTAoY29uZGl0aW9uLCBcIl9cIiwgc3RhdGUpKVxuI2NvdW50IGRhdGFcbmNvdW50cyA8LSBmcmVhZChcIklucHV0L2NvdW50X2NsZWFuLmNzdlwiKVxuYGBgIn0= -->
 <pre class="r"><code>#pheno data
 pheno &lt;- openxlsx::read.xlsx(&quot;Input/Susan_Annotations.xlsx&quot;, sheet=&quot;clean&quot;) %&gt;%
   mutate(condition_state = paste0(condition, &quot;_&quot;, state))
 #count data
-counts &lt;- fread(&quot;Input/count_clean.csv&quot;)
-count.matrix &lt;- as.matrix(counts[, -1]) %&gt;% `rownames&lt;-`(counts$entrezID) %&gt;% na.omit()</code></pre>
+counts &lt;- fread(&quot;Input/count_clean.csv&quot;)</code></pre>
 <!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiRXJyb3IgaW4gKGZ1bmN0aW9uIChzcmNyZWYpICA6IHVuaW1wbGVtZW50ZWQgdHlwZSAoMjkpIGluICdldmFsJ1xuRXJyb3I6IG5vIG1vcmUgZXJyb3IgaGFuZGxlcnMgYXZhaWxhYmxlIChyZWN1cnNpdmUgZXJyb3JzPyk7IGludm9raW5nICdhYm9ydCcgcmVzdGFydFxudHlwZSAyOSBpcyB1bmltcGxlbWVudGVkIGluICd0eXBlMmNoYXInRXJyb3IgaW4gRlVOKFhbW2ldXSwgLi4uKSA6IFxuICBJTlRFR0VSKCkgY2FuIG9ubHkgYmUgYXBwbGllZCB0byBhICdpbnRlZ2VyJywgbm90IGEgJ3Vua25vd24gdHlwZSAjMjknXG4ifQ== -->
+<pre><code>Error in (function (srcref)  : unimplemented type (29) in &#39;eval&#39;
+Error: no more error handlers available (recursive errors?); invoking &#39;abort&#39; restart
+type 29 is unimplemented in &#39;type2char&#39;Error in FUN(X[[i]], ...) : 
+  INTEGER() can only be applied to a &#39;integer&#39;, not a &#39;unknown type #29&#39;</code></pre>
+<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <p>Load Cellfie results</p>
@@ -331,10 +336,6 @@ ggpubr::ggarrange(viz.samples(&quot;A0_EXP&quot;, data=res.cellfie.norm),
                   ncol=2, nrow=2)
 dev.off()</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoibnVsbCBkZXZpY2UgXG4gICAgICAgICAgMSBcbiJ9 -->
-<pre><code>null device 
-          1 </code></pre>
-<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 </div>
@@ -507,13 +508,14 @@ PCA.cellfie.met &lt;- PCA.plots(cellfie.matrix.met, pheno=pheno)</code></pre>
 <p>Plot loadings of PC1</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyMgc2VjcmV0b3J5IHNjb3JlcyBvbmx5XG5QQzEuc2VjIDwtIGFzLmRhdGEuZnJhbWUoUENBLmNlbGxmaWUuc2VjJHJlc3VsdHMkcm90YXRpb24pICU+JVxuICB0aWJibGU6OnJvd25hbWVzX3RvX2NvbHVtbih2YXI9XCJUYXNrXCIpICU+JSBzZWxlY3QoYyhcIlRhc2tcIiwgXCJQQzFcIikpICU+JVxuICBhcnJhbmdlKFBDMSlcbmxldmVsLm9yZGVyIDwtIGFycmFuZ2UoUEMxLnNlYywgUEMxKVxuUEMxLnNlYyA8LSBtdXRhdGUoUEMxLnNlYywgVGFzaz1mYWN0b3IoVGFzaywgbGV2ZWxzPWxldmVsLm9yZGVyJFRhc2spKVxucG5nKFwiRmlndXJlcy9QQzFzZWNfbG9hZGluZ3MucG5nXCIsIHdpZHRoPTU4MCwgaGVpZ2h0PTQ4MClcbmdncGxvdChQQzEuc2VjLCBhZXMoUEMxLCBUYXNrLCBmaWxsPVBDMSkpICtcbiAgZ2VvbV9iYXIoc3RhdD1cImlkZW50aXR5XCIpICtcbiAgZ2d0aXRsZShcIlBDMSBMb2FkaW5nc1wiKSArXG4gIHNjYWxlX2ZpbGxfZ3JhZGllbnQyKGxvdz1zY2FsZXM6Om11dGVkKFwicmVkXCIpLCBtaWQ9XCJ3aGl0ZVwiLCBoaWdoPXNjYWxlczo6bXV0ZWQoXCJncmVlblwiKSwgbmFtZT1cIkxvYWRpbmdcIikgK1xuICB0aGVtZV9saW5lZHJhdygpICtcbiAgdGhlbWUodGV4dD1lbGVtZW50X3RleHQoc2l6ZT0xOSksIGF4aXMudGl0bGUueT1lbGVtZW50X2JsYW5rKCksIGF4aXMudGl0bGUueD1lbGVtZW50X2JsYW5rKCkpXG5kZXYub2ZmKClcbmBgYCJ9 -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyMgc2VjcmV0b3J5IHNjb3JlcyBvbmx5XG5QQzEuc2VjIDwtIGFzLmRhdGEuZnJhbWUoUENBLmNlbGxmaWUuc2VjJHJlc3VsdHMkcm90YXRpb24pICU+JVxuICB0aWJibGU6OnJvd25hbWVzX3RvX2NvbHVtbih2YXI9XCJUYXNrXCIpICU+JSBzZWxlY3QoYyhcIlRhc2tcIiwgXCJQQzFcIikpICU+JVxuICBhcnJhbmdlKFBDMSlcbmxldmVsLm9yZGVyIDwtIGFycmFuZ2UoUEMxLnNlYywgUEMxKVxuUEMxLnNlYyA8LSBtdXRhdGUoUEMxLnNlYywgVGFzaz1mYWN0b3IoVGFzaywgbGV2ZWxzPWxldmVsLm9yZGVyJFRhc2spKVxuXG5wbmcoXCJGaWd1cmVzL1BDMXNlY19sb2FkaW5ncy5wbmdcIiwgd2lkdGg9NTgwLCBoZWlnaHQ9NDgwKVxuZ2dwbG90KFBDMS5zZWMsIGFlcyhQQzEsIFRhc2ssIGZpbGw9UEMxKSkgK1xuICBnZW9tX2JhcihzdGF0PVwiaWRlbnRpdHlcIikgK1xuICBnZ3RpdGxlKFwiUEMxIExvYWRpbmdzXCIpICtcbiAgc2NhbGVfZmlsbF9ncmFkaWVudDIobG93PXNjYWxlczo6bXV0ZWQoXCJyZWRcIiksIG1pZD1cIndoaXRlXCIsIGhpZ2g9c2NhbGVzOjptdXRlZChcImdyZWVuXCIpLCBuYW1lPVwiTG9hZGluZ1wiKSArXG4gIHRoZW1lX2xpbmVkcmF3KCkgK1xuICB0aGVtZSh0ZXh0PWVsZW1lbnRfdGV4dChzaXplPTE5KSwgYXhpcy50aXRsZS55PWVsZW1lbnRfYmxhbmsoKSwgYXhpcy50aXRsZS54PWVsZW1lbnRfYmxhbmsoKSlcbmRldi5vZmYoKVxuXG4jIyBtZXQgYW5kIHNlYyBzY29yZXNcblBDMSA8LSBhcy5kYXRhLmZyYW1lKFBDQS5jZWxsZmllJHJlc3VsdHMkcm90YXRpb24pICU+JVxuICB0aWJibGU6OnJvd25hbWVzX3RvX2NvbHVtbih2YXI9XCJUYXNrXCIpICU+JSBzZWxlY3QoYyhcIlRhc2tcIiwgXCJQQzFcIikpICU+JVxuICBhcnJhbmdlKFBDMSlcblBDMS5zdWJzZXQgPC0gcmJpbmQoUEMxWzE6MTAsXSwgUEMxWygyMDQtOSk6MjA0LF0pXG5sZXZlbC5vcmRlciA8LSBhcnJhbmdlKFBDMS5zdWJzZXQsIFBDMSlcblBDMS5zdWJzZXQgPC0gbXV0YXRlKFBDMS5zdWJzZXQsIFRhc2s9ZmFjdG9yKFRhc2ssIGxldmVscz1sZXZlbC5vcmRlciRUYXNrKSlcblxuYGBgIn0= -->
 <pre class="r"><code>## secretory scores only
 PC1.sec &lt;- as.data.frame(PCA.cellfie.sec$results$rotation) %&gt;%
   tibble::rownames_to_column(var=&quot;Task&quot;) %&gt;% select(c(&quot;Task&quot;, &quot;PC1&quot;)) %&gt;%
   arrange(PC1)
 level.order &lt;- arrange(PC1.sec, PC1)
 PC1.sec &lt;- mutate(PC1.sec, Task=factor(Task, levels=level.order$Task))
+
 png(&quot;Figures/PC1sec_loadings.png&quot;, width=580, height=480)
 ggplot(PC1.sec, aes(PC1, Task, fill=PC1)) +
   geom_bar(stat=&quot;identity&quot;) +
@@ -521,20 +523,16 @@ ggplot(PC1.sec, aes(PC1, Task, fill=PC1)) +
   scale_fill_gradient2(low=scales::muted(&quot;red&quot;), mid=&quot;white&quot;, high=scales::muted(&quot;green&quot;), name=&quot;Loading&quot;) +
   theme_linedraw() +
   theme(text=element_text(size=19), axis.title.y=element_blank(), axis.title.x=element_blank())
-dev.off()</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoibnVsbCBkZXZpY2UgXG4gICAgICAgICAgMSBcbiJ9 -->
-<pre><code>null device 
-          1 </code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyMgbWV0IGFuZCBzZWMgc2NvcmVzXG5QQzEgPC0gYXMuZGF0YS5mcmFtZShQQ0EuY2VsbGZpZSRyZXN1bHRzJHJvdGF0aW9uKSAlPiVcbiAgdGliYmxlOjpyb3duYW1lc190b19jb2x1bW4odmFyPVwiVGFza1wiKSAlPiUgc2VsZWN0KGMoXCJUYXNrXCIsIFwiUEMxXCIpKSAlPiVcbiAgYXJyYW5nZShQQzEpXG5QQzEuc3Vic2V0IDwtIHJiaW5kKFBDMVsxOjEwLF0sIFBDMVsoMjA0LTkpOjIwNCxdKVxubGV2ZWwub3JkZXIgPC0gYXJyYW5nZShQQzEuc3Vic2V0LCBQQzEpXG5QQzEuc3Vic2V0IDwtIG11dGF0ZShQQzEuc3Vic2V0LCBUYXNrPWZhY3RvcihUYXNrLCBsZXZlbHM9bGV2ZWwub3JkZXIkVGFzaykpXG5gYGAifQ== -->
-<pre class="r"><code>## met and sec scores
+dev.off()
+
+## met and sec scores
 PC1 &lt;- as.data.frame(PCA.cellfie$results$rotation) %&gt;%
   tibble::rownames_to_column(var=&quot;Task&quot;) %&gt;% select(c(&quot;Task&quot;, &quot;PC1&quot;)) %&gt;%
   arrange(PC1)
 PC1.subset &lt;- rbind(PC1[1:10,], PC1[(204-9):204,])
 level.order &lt;- arrange(PC1.subset, PC1)
-PC1.subset &lt;- mutate(PC1.subset, Task=factor(Task, levels=level.order$Task))</code></pre>
+PC1.subset &lt;- mutate(PC1.subset, Task=factor(Task, levels=level.order$Task))
+</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
@@ -573,30 +571,24 @@ dev.off()</code></pre>
 <p>Clevland plot to show loadings of all secretory tasks on both PC1 and PC2</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuUEMxLnNlYyA8LSBsZWZ0X2pvaW4oUEMxLCB0YXNrSW5mbykgJT4lXG4gIGZpbHRlcihQYXRod2F5PT1cIlNlY3JldG9yeVwiKSAlPiUgXG4gIHJlbmFtZShMb2FkaW5nPVBDMSkgJT4lIG11dGF0ZShQQz1cIlBDMVwiKVxuYGBgIn0= -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuUEMxLnNlYyA8LSBsZWZ0X2pvaW4oUEMxLCB0YXNrSW5mbykgJT4lXG4gIGZpbHRlcihQYXRod2F5PT1cIlNlY3JldG9yeVwiKSAlPiUgXG4gIHJlbmFtZShMb2FkaW5nPVBDMSkgJT4lIG11dGF0ZShQQz1cIlBDMVwiKVxuUEMyLnNlYyA8LSBsZWZ0X2pvaW4oUEMyLCB0YXNrSW5mbykgJT4lXG4gIGZpbHRlcihQYXRod2F5PT1cIlNlY3JldG9yeVwiKSAlPiUgXG4gIHJlbmFtZShMb2FkaW5nPVBDMikgJT4lIG11dGF0ZShQQz1cIlBDMlwiKVxuXG4jbGV2ZWwub3JkZXIgPC0gYXJyYW5nZShERS5zZWMkRVhQdnNTVEFfQTEkd2VsY2gsIExGQykgJT4lIG5hLm9taXQoKVxuUEMxX1BDMiA8LSByYmluZChQQzEuc2VjLCBQQzIuc2VjKSAjJT4lIG11dGF0ZShUYXNrPWZhY3RvcihUYXNrLCBsZXZlbHM9bGV2ZWwub3JkZXIkVGFzaykpXG5cbmNsZXYucGxvdCA8LSBnZ3Bsb3QoUEMxX1BDMiwgYWVzKExvYWRpbmcsIFRhc2spKSArXG4gIGdlb21fcG9pbnQoYWVzKGNvbG9yPVBDKSwgc2l6ZT00LCBhbHBoYT0wLjcpICtcbiAgdGhlbWUodGV4dD1lbGVtZW50X3RleHQoc2l6ZT0xOSksIGF4aXMudGl0bGUueT1lbGVtZW50X2JsYW5rKCksIGxlZ2VuZC5wb3NpdGlvbiA9IFwiYm90dG9tXCIpICtcbiAgc2NhbGVfY29sb3JfbWFudWFsKHZhbHVlcz1jKFwiI0U2OUYwMFwiLCBcIiM1NkI0RTlcIikpICtcbiAgZ2d0aXRsZShcIlBDIExvYWRpbmdzXCIpXG5cblxucG5nKFwiRmlndXJlcy9jbGV2bGFuZF9QQ19ncmlkLnBuZ1wiLCB3aWR0aD02MTAsIGhlaWdodD02MTApXG5jbGV2LnBsb3QgKyB0aGVtZShsZWdlbmQucG9zaXRpb24gPSBcInJpZ2h0XCIpICtcbiAgZ2VvbV92bGluZSh4aW50ZXJjZXB0ID0gMCwgbGluZXR5cGU9XCJkb3R0ZWRcIiwgY29sb3IgPSBcInJlZFwiLCBzaXplPTEpICtcbiAgZmFjZXRfZ3JpZChTeXN0ZW0gfiAuLCBzY2FsZXM9XCJmcmVlXCIsIFxuICAgICAgICAgICAgICAgICAgICAgICBsYWJlbGxlciA9IGxhYmVsbGVyKFN5c3RlbSA9IGxhYmVsX3dyYXBfZ2VuKHdpZHRoID0gMTMpKSkgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAjIENoYW5nZSBzdHJpcC5iYWNrZ3JvdW5kIGNvbG9yXG4gICN0aGVtZShzdHJpcC5iYWNrZ3JvdW5kID0gZWxlbWVudF9yZWN0KGZpbGwgPSBjKFwicmVkXCIsIFwiYmx1ZVwiLCBcInllbGxvd1wiLCBcImdyZWVuXCIsIFwicGlua1wiKSkpXG5kZXYub2ZmKClcbmBgYCJ9 -->
 <pre class="r"><code>PC1.sec &lt;- left_join(PC1, taskInfo) %&gt;%
   filter(Pathway==&quot;Secretory&quot;) %&gt;% 
-  rename(Loading=PC1) %&gt;% mutate(PC=&quot;PC1&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiSm9pbmluZyB3aXRoIGBieSA9IGpvaW5fYnkoVGFzaylgXG4ifQ== -->
-<pre><code>Joining with `by = join_by(Task)`</code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuUEMyLnNlYyA8LSBsZWZ0X2pvaW4oUEMyLCB0YXNrSW5mbykgJT4lXG4gIGZpbHRlcihQYXRod2F5PT1cIlNlY3JldG9yeVwiKSAlPiUgXG4gIHJlbmFtZShMb2FkaW5nPVBDMikgJT4lIG11dGF0ZShQQz1cIlBDMlwiKVxuYGBgIn0= -->
-<pre class="r"><code>PC2.sec &lt;- left_join(PC2, taskInfo) %&gt;%
+  rename(Loading=PC1) %&gt;% mutate(PC=&quot;PC1&quot;)
+PC2.sec &lt;- left_join(PC2, taskInfo) %&gt;%
   filter(Pathway==&quot;Secretory&quot;) %&gt;% 
-  rename(Loading=PC2) %&gt;% mutate(PC=&quot;PC2&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiSm9pbmluZyB3aXRoIGBieSA9IGpvaW5fYnkoVGFzaylgXG4ifQ== -->
-<pre><code>Joining with `by = join_by(Task)`</code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuI2xldmVsLm9yZGVyIDwtIGFycmFuZ2UoREUuc2VjJEVYUHZzU1RBX0ExJHdlbGNoLCBMRkMpICU+JSBuYS5vbWl0KClcblBDMV9QQzIgPC0gcmJpbmQoUEMxLnNlYywgUEMyLnNlYykgIyU+JSBtdXRhdGUoVGFzaz1mYWN0b3IoVGFzaywgbGV2ZWxzPWxldmVsLm9yZGVyJFRhc2spKVxuY2xldi5wbG90IDwtIGdncGxvdChQQzFfUEMyLCBhZXMoTG9hZGluZywgVGFzaykpICtcbiAgZ2VvbV9wb2ludChhZXMoY29sb3I9UEMpLCBzaXplPTQsIGFscGhhPTAuNykgK1xuICB0aGVtZSh0ZXh0PWVsZW1lbnRfdGV4dChzaXplPTE5KSwgYXhpcy50aXRsZS55PWVsZW1lbnRfYmxhbmsoKSwgbGVnZW5kLnBvc2l0aW9uID0gXCJib3R0b21cIikgK1xuICBzY2FsZV9jb2xvcl9tYW51YWwodmFsdWVzPWMoXCIjRTY5RjAwXCIsIFwiIzU2QjRFOVwiKSkgK1xuICBnZ3RpdGxlKFwiUEMgTG9hZGluZ3NcIilcbnBuZyhcIkZpZ3VyZXMvY2xldmxhbmRfUENfZ3JpZC5wbmdcIiwgd2lkdGg9NjEwLCBoZWlnaHQ9NjEwKVxuY2xldi5wbG90ICsgdGhlbWUobGVnZW5kLnBvc2l0aW9uID0gXCJyaWdodFwiKSArXG4gIGdlb21fdmxpbmUoeGludGVyY2VwdCA9IDAsIGxpbmV0eXBlPVwiZG90dGVkXCIsIGNvbG9yID0gXCJyZWRcIiwgc2l6ZT0xKSArXG4gIGZhY2V0X2dyaWQoU3lzdGVtIH4gLiwgc2NhbGVzPVwiZnJlZVwiLCBcbiAgICAgICAgICAgICAgICAgICAgICAgbGFiZWxsZXIgPSBsYWJlbGxlcihTeXN0ZW0gPSBsYWJlbF93cmFwX2dlbih3aWR0aCA9IDEzKSkpICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIyBDaGFuZ2Ugc3RyaXAuYmFja2dyb3VuZCBjb2xvclxuICAjdGhlbWUoc3RyaXAuYmFja2dyb3VuZCA9IGVsZW1lbnRfcmVjdChmaWxsID0gYyhcInJlZFwiLCBcImJsdWVcIiwgXCJ5ZWxsb3dcIiwgXCJncmVlblwiLCBcInBpbmtcIikpKVxuZGV2Lm9mZigpXG5gYGAifQ== -->
-<pre class="r"><code>#level.order &lt;- arrange(DE.sec$EXPvsSTA_A1$welch, LFC) %&gt;% na.omit()
+  rename(Loading=PC2) %&gt;% mutate(PC=&quot;PC2&quot;)
+
+#level.order &lt;- arrange(DE.sec$EXPvsSTA_A1$welch, LFC) %&gt;% na.omit()
 PC1_PC2 &lt;- rbind(PC1.sec, PC2.sec) #%&gt;% mutate(Task=factor(Task, levels=level.order$Task))
+
 clev.plot &lt;- ggplot(PC1_PC2, aes(Loading, Task)) +
   geom_point(aes(color=PC), size=4, alpha=0.7) +
   theme(text=element_text(size=19), axis.title.y=element_blank(), legend.position = &quot;bottom&quot;) +
   scale_color_manual(values=c(&quot;#E69F00&quot;, &quot;#56B4E9&quot;)) +
   ggtitle(&quot;PC Loadings&quot;)
+
+
 png(&quot;Figures/clevland_PC_grid.png&quot;, width=610, height=610)
 clev.plot + theme(legend.position = &quot;right&quot;) +
   geom_vline(xintercept = 0, linetype=&quot;dotted&quot;, color = &quot;red&quot;, size=1) +
@@ -605,10 +597,6 @@ clev.plot + theme(legend.position = &quot;right&quot;) +
   #theme(strip.background = element_rect(fill = c(&quot;red&quot;, &quot;blue&quot;, &quot;yellow&quot;, &quot;green&quot;, &quot;pink&quot;)))
 dev.off()</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiUlN0dWRpb0dEIFxuICAgICAgICAyIFxuIn0= -->
-<pre><code>RStudioGD 
-        2 </code></pre>
-<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 </div>
@@ -694,7 +682,7 @@ openxlsx::write.xlsx(list(A1vsA0_EXP=DE.met$A1vsA0_EXP$sigRes,
 <p>Dotplot of sig tasks Secretory</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyMgRVhQIHZzIFNUQVxuU1RBdnNFWFAgPC0gbXV0YXRlKERFLnNlYyRTVEF2c0VYUF9BMSRzaWdSZXMsIGNsb25lPVwiQTFcIikgJT4lIFxuICByYmluZChtdXRhdGUoREUuc2VjJFNUQXZzRVhQX0EwJHNpZ1JlcywgY2xvbmU9XCJBMFwiKSkgJT4lXG4gIGFycmFuZ2UoTEZDKSBcbmxldmVsLm9yZGVyIDwtIGFycmFuZ2UoU1RBdnNFWFAsIExGQylcblNUQXZzRVhQIDwtIG11dGF0ZShTVEF2c0VYUCwgVGFzaz1mYWN0b3IoVGFzaywgbGV2ZWxzPWxldmVsLm9yZGVyJFRhc2spKVxucDEgPC0gZ2dwbG90KFNUQXZzRVhQLCBhZXMoTEZDLCBUYXNrKSkgK1xuICBnZW9tX3BvaW50KGFlcyhjb2xvcj1jbG9uZSksIHNpemU9NSwgYWxwaGE9MC43KSArXG4gIHRoZW1lKHRleHQ9ZWxlbWVudF90ZXh0KHNpemU9MTkpLCBheGlzLnRpdGxlLnk9ZWxlbWVudF9ibGFuaygpKSArXG4gIGdndGl0bGUoXCJTVEEgdnMgRVhQXCIpICtcbiAgZ2VvbV92bGluZSh4aW50ZXJjZXB0ID0gMCwgbGluZXR5cGU9XCJkb3R0ZWRcIiwgY29sb3IgPSBcInJlZFwiLCBzaXplPTEpXG4jIyBBMSB2cyBBMFxuQTF2c0EwIDwtIG11dGF0ZShERS5zZWMkQTF2c0EwX0VYUCRzaWdSZXMsIHBoYXNlPVwiRVhQXCIpICU+JSBcbiAgcmJpbmQobXV0YXRlKERFLnNlYyRBMXZzQTBfU1RBJHNpZ1JlcywgcGhhc2U9XCJTVEFcIikpICU+JVxuICBhcnJhbmdlKExGQylcbmxldmVsLm9yZGVyIDwtIGFycmFuZ2UoQTF2c0EwLCBMRkMpXG5BMXZzQTAgPC0gbXV0YXRlKEExdnNBMCwgVGFzaz1mYWN0b3IoVGFzaywgbGV2ZWxzPWxldmVsLm9yZGVyJFRhc2spKVxucDIgPC0gZ2dwbG90KEExdnNBMCwgYWVzKExGQywgVGFzaykpICtcbiAgZ2VvbV9wb2ludChhZXMoY29sb3I9cGhhc2UpLCBzaXplPTUsIGFscGhhPTAuNykgK1xuICB0aGVtZSh0ZXh0PWVsZW1lbnRfdGV4dChzaXplPTE5KSwgYXhpcy50aXRsZS55PWVsZW1lbnRfYmxhbmsoKSkgK1xuICBnZ3RpdGxlKFwiQTEgdnMgQTBcIikgKyBcbiAgc2NhbGVfY29sb3JfYnJld2VyKHBhbGV0dGU9XCJBY2NlbnRcIikgK1xuICBnZW9tX3ZsaW5lKHhpbnRlcmNlcHQgPSAwLCBsaW5ldHlwZT1cImRvdHRlZFwiLCBjb2xvciA9IFwicmVkXCIsIHNpemU9MSlcbmBgYCJ9 -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyMgRVhQIHZzIFNUQVxuU1RBdnNFWFAgPC0gbXV0YXRlKERFLnNlYyRTVEF2c0VYUF9BMSRzaWdSZXMsIGNsb25lPVwiQTFcIikgJT4lIFxuICByYmluZChtdXRhdGUoREUuc2VjJFNUQXZzRVhQX0EwJHNpZ1JlcywgY2xvbmU9XCJBMFwiKSkgJT4lXG4gIGFycmFuZ2UoTEZDKSBcbmxldmVsLm9yZGVyIDwtIGFycmFuZ2UoU1RBdnNFWFAsIExGQylcblNUQXZzRVhQIDwtIG11dGF0ZShTVEF2c0VYUCwgVGFzaz1mYWN0b3IoVGFzaywgbGV2ZWxzPWxldmVsLm9yZGVyJFRhc2spKVxucDEgPC0gZ2dwbG90KFNUQXZzRVhQLCBhZXMoTEZDLCBUYXNrKSkgK1xuICBnZW9tX3BvaW50KGFlcyhjb2xvcj1jbG9uZSksIHNpemU9NSwgYWxwaGE9MC43KSArXG4gIHRoZW1lKHRleHQ9ZWxlbWVudF90ZXh0KHNpemU9MTkpLCBheGlzLnRpdGxlLnk9ZWxlbWVudF9ibGFuaygpKSArXG4gIGdndGl0bGUoXCJTVEEgdnMgRVhQXCIpICtcbiAgZ2VvbV92bGluZSh4aW50ZXJjZXB0ID0gMCwgbGluZXR5cGU9XCJkb3R0ZWRcIiwgY29sb3IgPSBcInJlZFwiLCBzaXplPTEpXG5gYGAifQ== -->
 <pre class="r"><code>## EXP vs STA
 STAvsEXP &lt;- mutate(DE.sec$STAvsEXP_A1$sigRes, clone=&quot;A1&quot;) %&gt;% 
   rbind(mutate(DE.sec$STAvsEXP_A0$sigRes, clone=&quot;A0&quot;)) %&gt;%
@@ -705,8 +693,13 @@ p1 &lt;- ggplot(STAvsEXP, aes(LFC, Task)) +
   geom_point(aes(color=clone), size=5, alpha=0.7) +
   theme(text=element_text(size=19), axis.title.y=element_blank()) +
   ggtitle(&quot;STA vs EXP&quot;) +
-  geom_vline(xintercept = 0, linetype=&quot;dotted&quot;, color = &quot;red&quot;, size=1)
-## A1 vs A0
+  geom_vline(xintercept = 0, linetype=&quot;dotted&quot;, color = &quot;red&quot;, size=1)</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiVXNpbmcgYHNpemVgIGFlc3RoZXRpYyBmb3IgbGluZXMgd2FzIGRlcHJlY2F0ZWQgaW4gZ2dwbG90MiAzLjQuMC5cbiJ9 -->
+<pre><code>Using `size` aesthetic for lines was deprecated in ggplot2 3.4.0.</code></pre>
+<!-- rnb-output-end -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyMgQTEgdnMgQTBcbkExdnNBMCA8LSBtdXRhdGUoREUuc2VjJEExdnNBMF9FWFAkc2lnUmVzLCBwaGFzZT1cIkVYUFwiKSAlPiUgXG4gIHJiaW5kKG11dGF0ZShERS5zZWMkQTF2c0EwX1NUQSRzaWdSZXMsIHBoYXNlPVwiU1RBXCIpKSAlPiVcbiAgYXJyYW5nZShMRkMpXG5sZXZlbC5vcmRlciA8LSBhcnJhbmdlKEExdnNBMCwgTEZDKVxuQTF2c0EwIDwtIG11dGF0ZShBMXZzQTAsIFRhc2s9ZmFjdG9yKFRhc2ssIGxldmVscz1sZXZlbC5vcmRlciRUYXNrKSlcbnAyIDwtIGdncGxvdChBMXZzQTAsIGFlcyhMRkMsIFRhc2spKSArXG4gIGdlb21fcG9pbnQoYWVzKGNvbG9yPXBoYXNlKSwgc2l6ZT01LCBhbHBoYT0wLjcpICtcbiAgdGhlbWUodGV4dD1lbGVtZW50X3RleHQoc2l6ZT0xOSksIGF4aXMudGl0bGUueT1lbGVtZW50X2JsYW5rKCkpICtcbiAgZ2d0aXRsZShcIkExIHZzIEEwXCIpICsgXG4gIHNjYWxlX2NvbG9yX2JyZXdlcihwYWxldHRlPVwiQWNjZW50XCIpICtcbiAgZ2VvbV92bGluZSh4aW50ZXJjZXB0ID0gMCwgbGluZXR5cGU9XCJkb3R0ZWRcIiwgY29sb3IgPSBcInJlZFwiLCBzaXplPTEpXG5gYGAifQ== -->
+<pre class="r"><code>## A1 vs A0
 A1vsA0 &lt;- mutate(DE.sec$A1vsA0_EXP$sigRes, phase=&quot;EXP&quot;) %&gt;% 
   rbind(mutate(DE.sec$A1vsA0_STA$sigRes, phase=&quot;STA&quot;)) %&gt;%
   arrange(LFC)
@@ -754,19 +747,16 @@ p4 &lt;- ggplot(A1vsA0, aes(LFC, Task)) +
 <p>Combine all plots into a single figure</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucDEuZ3JvYiA8LSBwMSArIHRoZW1lKHBsb3QudGl0bGUgPSBlbGVtZW50X3RleHQoaGp1c3QgPSAwLjUpKSMrZ2d0aXRsZShcIlwiKVxucDIuZ3JvYiA8LSBwMiArIHRoZW1lKHBsb3QudGl0bGUgPSBlbGVtZW50X3RleHQoaGp1c3QgPSAwLjUpKSMrZ2d0aXRsZShcIlwiKVxucDMuZ3JvYiA8LSBwMyArIHRoZW1lKHBsb3QudGl0bGUgPSBlbGVtZW50X3RleHQoaGp1c3QgPSAwLjUpKSMrZ2d0aXRsZShcIlwiKVxucDQuZ3JvYiA8LSBwNCArIHRoZW1lKHBsb3QudGl0bGUgPSBlbGVtZW50X3RleHQoaGp1c3QgPSAwLjUpKSMrZ2d0aXRsZShcIlwiKVxucG5nKFwiRmlndXJlcy9kb3RwbG90X2FsbC5wbmdcIiwgd2lkdGg9MTIwMCwgaGVpZ2h0PTcwMClcbmVnZzo6Z2dhcnJhbmdlKHAxLmdyb2IsIHAyLmdyb2IsIHAzLmdyb2IsIHA0Lmdyb2IsIG5jb2w9MilcbmRldi5vZmYoKVxuYGBgIn0= -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucDEuZ3JvYiA8LSBwMSArIHRoZW1lKHBsb3QudGl0bGUgPSBlbGVtZW50X3RleHQoaGp1c3QgPSAwLjUpKSMrZ2d0aXRsZShcIlwiKVxucDIuZ3JvYiA8LSBwMiArIHRoZW1lKHBsb3QudGl0bGUgPSBlbGVtZW50X3RleHQoaGp1c3QgPSAwLjUpKSMrZ2d0aXRsZShcIlwiKVxucDMuZ3JvYiA8LSBwMyArIHRoZW1lKHBsb3QudGl0bGUgPSBlbGVtZW50X3RleHQoaGp1c3QgPSAwLjUpKSMrZ2d0aXRsZShcIlwiKVxucDQuZ3JvYiA8LSBwNCArIHRoZW1lKHBsb3QudGl0bGUgPSBlbGVtZW50X3RleHQoaGp1c3QgPSAwLjUpKSMrZ2d0aXRsZShcIlwiKVxuXG5wbmcoXCJGaWd1cmVzL2RvdHBsb3RfYWxsLnBuZ1wiLCB3aWR0aD0xMjAwLCBoZWlnaHQ9NzAwKVxuZWdnOjpnZ2FycmFuZ2UocDEuZ3JvYiwgcDIuZ3JvYiwgcDMuZ3JvYiwgcDQuZ3JvYiwgbmNvbD0yKVxuZGV2Lm9mZigpXG5gYGAifQ== -->
 <pre class="r"><code>p1.grob &lt;- p1 + theme(plot.title = element_text(hjust = 0.5))#+ggtitle(&quot;&quot;)
 p2.grob &lt;- p2 + theme(plot.title = element_text(hjust = 0.5))#+ggtitle(&quot;&quot;)
 p3.grob &lt;- p3 + theme(plot.title = element_text(hjust = 0.5))#+ggtitle(&quot;&quot;)
 p4.grob &lt;- p4 + theme(plot.title = element_text(hjust = 0.5))#+ggtitle(&quot;&quot;)
+
 png(&quot;Figures/dotplot_all.png&quot;, width=1200, height=700)
 egg::ggarrange(p1.grob, p2.grob, p3.grob, p4.grob, ncol=2)
 dev.off()</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoibnVsbCBkZXZpY2UgXG4gICAgICAgICAgMSBcbiJ9 -->
-<pre><code>null device 
-          1 </code></pre>
-<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <!-- rnb-text-end -->
@@ -823,21 +813,14 @@ dev.off()</code></pre>
 <p>Load data</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucmF3LmNvdW50cyA8LSBmcmVhZChcIklucHV0L2NvdW50cy5jc3ZcIikgJT4lIHNlbGVjdChjKFwiZ2VuZS5pZFwiLCBcImdlbmVcIiwgY29sbmFtZXMoY291bnQubWF0cml4KSkpXG5waGVubyA8LSBvcGVueGxzeDo6cmVhZC54bHN4KFwiSW5wdXQvU3VzYW5fQW5ub3RhdGlvbnMueGxzeFwiLCBzaGVldD1cImNsZWFuXCIpXG4jIEl0IGlzIGFic29sdXRlbHkgY3JpdGljYWwgdGhhdCB0aGUgY29sdW1ucyBvZiB0aGUgY291bnQgbWF0cml4IGFuZCB0aGUgcm93cyBvZiB0aGUgY29sdW1uIGRhdGEgKGluZm9ybWF0aW9uIGFib3V0IHNhbXBsZXMpIGFyZSBpbiB0aGUgc2FtZSBvcmRlci5cbmlkZW50aWNhbChjb2xuYW1lcyhjb3VudC5tYXRyaXgpLCBwaGVubyRzYW1wbGUuaWQpXG5gYGAifQ== -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucmF3LmNvdW50cyA8LSBmcmVhZChcIklucHV0L2NvdW50cy5jc3ZcIikgJT4lIHNlbGVjdChjKFwiZ2VuZS5pZFwiLCBcImdlbmVcIiwgY29sbmFtZXMoY291bnQubWF0cml4KSkpXG5waGVubyA8LSBvcGVueGxzeDo6cmVhZC54bHN4KFwiSW5wdXQvU3VzYW5fQW5ub3RhdGlvbnMueGxzeFwiLCBzaGVldD1cImNsZWFuXCIpXG5cbiMgSXQgaXMgYWJzb2x1dGVseSBjcml0aWNhbCB0aGF0IHRoZSBjb2x1bW5zIG9mIHRoZSBjb3VudCBtYXRyaXggYW5kIHRoZSByb3dzIG9mIHRoZSBjb2x1bW4gZGF0YSAoaW5mb3JtYXRpb24gYWJvdXQgc2FtcGxlcykgYXJlIGluIHRoZSBzYW1lIG9yZGVyLlxuaWRlbnRpY2FsKGNvbG5hbWVzKGNvdW50Lm1hdHJpeCksIHBoZW5vJHNhbXBsZS5pZClcbmFsbChwaGVubyRzYW1wbGUuaWQgPT0gY29sbmFtZXMoY291bnQubWF0cml4KSlcbmBgYCJ9 -->
 <pre class="r"><code>raw.counts &lt;- fread(&quot;Input/counts.csv&quot;) %&gt;% select(c(&quot;gene.id&quot;, &quot;gene&quot;, colnames(count.matrix)))
 pheno &lt;- openxlsx::read.xlsx(&quot;Input/Susan_Annotations.xlsx&quot;, sheet=&quot;clean&quot;)
+
 # It is absolutely critical that the columns of the count matrix and the rows of the column data (information about samples) are in the same order.
-identical(colnames(count.matrix), pheno$sample.id)</code></pre>
+identical(colnames(count.matrix), pheno$sample.id)
+all(pheno$sample.id == colnames(count.matrix))</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiWzFdIFRSVUVcbiJ9 -->
-<pre><code>[1] TRUE</code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYWxsKHBoZW5vJHNhbXBsZS5pZCA9PSBjb2xuYW1lcyhjb3VudC5tYXRyaXgpKVxuYGBgIn0= -->
-<pre class="r"><code>all(pheno$sample.id == colnames(count.matrix))</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiWzFdIFRSVUVcbiJ9 -->
-<pre><code>[1] TRUE</code></pre>
-<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <p>Construct DESeqDataSet from count matrix</p>
@@ -874,15 +857,17 @@ res.sig &lt;- filter(res, padj&lt;= 0.01)</code></pre>
 <p>Add PSIM info</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuQ0hPbWFwIDwtIG9wZW54bHN4OjpyZWFkLnhsc3goXCJJbnB1dC9DSE9Qcm90ZWluLnhsc3hcIilcbkNIT21hcDIgPC0gZnJlYWQoXCJJbnB1dC9nZW5lSW5mb19jaG9fc2ltcGxlLnRzdlwiKSAlPiVcbiAgbXV0YXRlKEdlbmVJRD1hcy5jaGFyYWN0ZXIoR2VuZUlEKSlcblBTSU0gPC0gb3Blbnhsc3g6OnJlYWQueGxzeChcIklucHV0L1BTSU1fbWF0cml4Lnhsc3hcIilcbnJlcy5QU0lNIDwtIGxlZnRfam9pbihyZXMsIENIT21hcCwgYnk9YyhcImdlbmVcIj1cIkVOVFJFWl9HRU5FXCIpKSAlPiVcbiAgbGVmdF9qb2luKFBTSU0sIGJ5PWMoXCJVTklQUk9US0JcIj1cIkVudHJ5XCIpKSAlPiUgZmlsdGVyKEdQST09MSkgJT4lIGFycmFuZ2UobG9nMkZvbGRDaGFuZ2UpICU+JSBcbiAgbGVmdF9qb2luKENIT21hcDIsIGJ5PWMoXCJnZW5lXCI9XCJHZW5lSURcIikpXG5WaWV3KGZpbHRlcihyZXMuUFNJTSwgcGFkajw9MC4wMSkgJT4lIGZpbHRlcihhYnMobG9nMkZvbGRDaGFuZ2UpID49IGxvZzIoMS41KSkpXG5gYGAifQ== -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuQ0hPbWFwIDwtIG9wZW54bHN4OjpyZWFkLnhsc3goXCJJbnB1dC9DSE9Qcm90ZWluLnhsc3hcIilcbkNIT21hcDIgPC0gZnJlYWQoXCJJbnB1dC9nZW5lSW5mb19jaG9fc2ltcGxlLnRzdlwiKSAlPiVcbiAgbXV0YXRlKEdlbmVJRD1hcy5jaGFyYWN0ZXIoR2VuZUlEKSlcblBTSU0gPC0gb3Blbnhsc3g6OnJlYWQueGxzeChcIklucHV0L1BTSU1fbWF0cml4Lnhsc3hcIilcblxucmVzLlBTSU0gPC0gbGVmdF9qb2luKHJlcywgQ0hPbWFwLCBieT1jKFwiZ2VuZVwiPVwiRU5UUkVaX0dFTkVcIikpICU+JVxuICBsZWZ0X2pvaW4oUFNJTSwgYnk9YyhcIlVOSVBST1RLQlwiPVwiRW50cnlcIikpICU+JSBmaWx0ZXIoR1BJPT0xKSAlPiUgYXJyYW5nZShsb2cyRm9sZENoYW5nZSkgJT4lIFxuICBsZWZ0X2pvaW4oQ0hPbWFwMiwgYnk9YyhcImdlbmVcIj1cIkdlbmVJRFwiKSlcblZpZXcoZmlsdGVyKHJlcy5QU0lNLCBwYWRqPD0wLjAxKSAlPiUgZmlsdGVyKGFicyhsb2cyRm9sZENoYW5nZSkgPj0gbG9nMigxLjUpKSlcblxuYGBgIn0= -->
 <pre class="r"><code>CHOmap &lt;- openxlsx::read.xlsx(&quot;Input/CHOProtein.xlsx&quot;)
 CHOmap2 &lt;- fread(&quot;Input/geneInfo_cho_simple.tsv&quot;) %&gt;%
   mutate(GeneID=as.character(GeneID))
 PSIM &lt;- openxlsx::read.xlsx(&quot;Input/PSIM_matrix.xlsx&quot;)
+
 res.PSIM &lt;- left_join(res, CHOmap, by=c(&quot;gene&quot;=&quot;ENTREZ_GENE&quot;)) %&gt;%
   left_join(PSIM, by=c(&quot;UNIPROTKB&quot;=&quot;Entry&quot;)) %&gt;% filter(GPI==1) %&gt;% arrange(log2FoldChange) %&gt;% 
   left_join(CHOmap2, by=c(&quot;gene&quot;=&quot;GeneID&quot;))
-View(filter(res.PSIM, padj&lt;=0.01) %&gt;% filter(abs(log2FoldChange) &gt;= log2(1.5)))</code></pre>
+View(filter(res.PSIM, padj&lt;=0.01) %&gt;% filter(abs(log2FoldChange) &gt;= log2(1.5)))
+</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
@@ -958,7 +943,7 @@ $(document).ready(function () {
 <!-- code folding -->
 <script>
 $(document).ready(function () {
-  window.initializeSourceEmbed("Sharfstein_analysis.Rmd");
+  window.initializeSourceEmbed("CHO_mAb.Rmd");
   window.initializeCodeFolding("show" === "show");
 });
 </script>

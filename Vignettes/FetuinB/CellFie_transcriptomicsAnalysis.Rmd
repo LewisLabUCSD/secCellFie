@@ -263,14 +263,35 @@ dev.off()
 Heatmap of CellFie Scores
 ######################################################
 
+Heatmap to get clusters
 ```{r}
 ### prepare expression data
 cellfie.matrix <- dplyr::select(res.cellfie, c("NAFLD_R1", "NAFLD_R2", "NAFLD_R3", "WT_R1", "WT_R2", "WT_R3")) %>% as.matrix() %>% `rownames<-`(taskInfo$Task)
 # remove constant/zero columns
 cellfie.matrix <- cellfie.matrix[matrixStats::rowSds(cellfie.matrix) != 0 ,]
 
+# clustered heatmap
+hmap <- pheatmap::pheatmap(cellfie.matrix,
+                   scale="row",
+                   color=colorRampPalette((c("red", "white", "blue")))(50),
+                   cluster_rows = T, 
+                   cluster_cols = T,
+                   show_rownames = F,
+                   cutree_cols = 2,
+                   cutree_rows = 2,
+                   treeheight_row = 0,
+                   annotation_row = dplyr::select(taskInfo, c("Pathway")) %>% `rownames<-`(taskInfo$Task))
+
+clust.samples <- cutree(hmap$tree_row, k=2) %>% 
+  as.data.frame() %>% setNames("num.cluster") %>%
+  tibble::rownames_to_column(var="Task") %>%
+  left_join(taskInfo) %>%
+  mutate(Cluster=case_when(num.cluster==1 ~ "B", num.cluster==2 ~ "A")) %>%
+  arrange(Cluster)
+
 ```
 
+Use cluster info to make pretty figure
 ```{r}
 png("Figures/hmap_tasks.png", width=550, height=550)
 hmap2 <- pheatmap::pheatmap(cellfie.matrix,
